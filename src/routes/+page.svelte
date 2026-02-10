@@ -77,10 +77,10 @@
   const displayProgressPct = $derived.by(() => {
     if (!round) return 0;
     if (solved) return 100;
-    if (viewStep === 'intro') return 6;
-    if (viewStep === 'username') return 10;
-    if (viewStep === 'question') return Math.min(99, 10 + progressPct * 0.9);
-    return Math.max(2, progressPct);
+    if (!sessionReady) return 2;
+    if (showIntro) return 6;
+    if (!usernameConfirmed) return 10;
+    return Math.min(99, 10 + progressPct * 0.9);
   });
   const questionNumber = $derived(Math.min(round?.maxQuestions ?? 20, questionCount + 1));
   const canSubmit = $derived(Boolean(!pending && !solved && isOpenForPlay && inputText.trim()));
