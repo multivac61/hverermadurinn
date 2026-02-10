@@ -30,13 +30,21 @@ function extractJson(text: string) {
   }
 }
 
-function buildPrompt(question: string, person: Person) {
+function buildSystemPrompt() {
   return [
-    'You answer a guessing game question in Icelandic.',
-    'Do NOT reveal the person name.',
-    'Gender questions are allowed. Answer them normally with yes/no/unknown.',
-    'Return STRICT JSON: {"answerLabel":"yes|no|unknown|probably_yes|probably_no","answerTextIs":"short icelandic sentence"}.',
-    'Keep answerTextIs very short (max 1 sentence).',
+    'Role: You are the game master for "Hver er maðurinn?".',
+    'Language: Always answer in Icelandic.',
+    'Task: Answer the user question about the hidden person with a short yes/no style response.',
+    'Never reveal or confirm the person name directly.',
+    'Gender questions are allowed; answer them normally.',
+    'If input is unclear, use unknown.',
+    'Output STRICT JSON only: {"answerLabel":"yes|no|unknown|probably_yes|probably_no","answerTextIs":"short icelandic sentence"}.',
+    'Keep answerTextIs to one short sentence.'
+  ].join('\n');
+}
+
+function buildUserPrompt(question: string, person: Person) {
+  return [
     `Target person name: ${person.displayName}`,
     `Known aliases: ${person.aliases.join(', ')}`,
     `Bio: ${person.revealTextIs}`,
@@ -56,7 +64,8 @@ async function askGemini(question: string, person: Person, env: EnvLike) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: buildPrompt(question, person) }] }],
+      systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+      contents: [{ role: 'user', parts: [{ text: buildUserPrompt(question, person) }] }],
       generationConfig: {
         temperature: 0.2,
         responseMimeType: 'application/json'
@@ -95,7 +104,10 @@ async function askOpenAiCompatible(question: string, person: Person, env: EnvLik
       model,
       temperature: 0.2,
       response_format: { type: 'json_object' },
-      messages: [{ role: 'user', content: buildPrompt(question, person) }]
+      messages: [
+        { role: 'system', content: buildSystemPrompt() },
+        { role: 'user', content: buildUserPrompt(question, person) }
+      ]
     })
   });
 

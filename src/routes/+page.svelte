@@ -63,6 +63,9 @@
   const questionCount = $derived(sessionState?.session?.questionCount ?? 0);
   const solved = $derived(sessionState?.session?.solved ?? false);
   const questions = $derived(sessionState?.questions ?? []);
+  const latestAnswerText = $derived(
+    questions.length > 0 ? String(questions[questions.length - 1]?.answerTextIs ?? '') : ''
+  );
   const remainingQuestions = $derived(round ? Math.max(0, round.maxQuestions - questionCount) : 0);
   const isOpenForPlay = $derived(Boolean(localTestMode || round?.status === 'open'));
   const pending = $derived(
@@ -166,6 +169,36 @@
 
     const guessMatch = input.match(/^(gisk|giska|guess)\s*:\s*(.+)$/i);
     if (guessMatch) return { kind: 'guess' as const, value: guessMatch[2].trim() };
+
+    const questionStarters = [
+      'er ',
+      'var ',
+      'hefur ',
+      'hefurðu ',
+      'hvað ',
+      'hver ',
+      'hvenær ',
+      'af hverju ',
+      'is ',
+      'was ',
+      'does ',
+      'do ',
+      'did ',
+      'can ',
+      'could ',
+      'would ',
+      'where ',
+      'when ',
+      'who ',
+      'what '
+    ];
+
+    const looksLikeQuestion = input.includes('?') || questionStarters.some((start) => lower.startsWith(start));
+    const looksLikeName = /^[\p{L}.'’\-]+(?:\s+[\p{L}.'’\-]+){0,2}$/u.test(input);
+
+    if (!looksLikeQuestion && looksLikeName) {
+      return { kind: 'guess' as const, value: input };
+    }
 
     return { kind: 'question' as const, value: input };
   }
@@ -350,14 +383,14 @@
   <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
 </div>
 
-<main class="min-h-screen bg-zinc-50 px-6 py-8 text-zinc-900 sm:px-10">
-  <div class="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-4xl items-center justify-center">
-    <section class="min-h-[70vh] w-full rounded-[34px] bg-white px-8 py-10 shadow-[0_30px_90px_-36px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:px-12 sm:py-14">
-      <div class="flex min-h-[52vh] flex-col justify-center">
+<main class="min-h-screen bg-zinc-50 px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
+  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-3xl items-center justify-center sm:min-h-[calc(100vh-4rem)]">
+    <section class="w-full rounded-3xl bg-white px-5 py-7 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:rounded-[34px] sm:px-10 sm:py-12">
+      <div class="flex min-h-[60vh] flex-col justify-center sm:min-h-[52vh]">
           {#if viewStep === 'loading'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hleð stöðu leiks...</h1>
+            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
           {:else if viewStep === 'username'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hvað á ég að kalla þig?</h1>
+            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hvað á ég að kalla þig?</h1>
             <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">
               {username ? 'Staðfestu notendanafnið þitt eða breyttu því.' : 'Veldu notendanafn áður en þú byrjar.'}
             </p>
@@ -387,13 +420,17 @@
               <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{usernameError}</p>
             {/if}
           {:else if viewStep === 'intro'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hver er maðurinn?</h1>
+            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hver er maðurinn?</h1>
             <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">Þú hefur 20 spurningar.</p>
             <button class="mt-10 rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white" onclick={startGame}>
               Byrja
             </button>
           {:else if viewStep === 'question'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hver er maðurinn?</h1>
+            <h1
+              class={`mt-10 font-semibold leading-[1.04] ${latestAnswerText || feedback ? 'text-4xl sm:text-5xl' : 'text-5xl sm:text-7xl'}`}
+            >
+              {latestAnswerText || feedback || 'Hver er maðurinn?'}
+            </h1>
 
             <form class="mt-12" onsubmit={submitCurrent}>
               <input
@@ -412,10 +449,6 @@
                 <span class="text-xs text-zinc-500">ENTER ↵</span>
               </div>
             </form>
-
-            {#if feedback}
-              <p class="mt-8 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-700">{feedback}</p>
-            {/if}
 
             {#if hint}
               <p class="mt-3 rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-900">Vísbending: {hint}</p>
