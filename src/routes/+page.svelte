@@ -45,6 +45,7 @@
   let hasSubmitted = $state(false);
   let showIntro = $state(true);
   let shareStatus = $state('');
+  let showEndLeaderboard = $state(false);
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
@@ -56,6 +57,7 @@
   );
   const revealPerson = $derived(revealedFromGuess ?? revealFromRound);
   const leaderboard = $derived((leaderboardQuery.current?.leaderboard as any[]) ?? []);
+  const myLeaderboardEntry = $derived(leaderboard.find((row) => row.sessionId === sessionId) ?? null);
   const sessionState = $derived(sessionStateQuery?.current ?? null);
   const questionCount = $derived(sessionState?.session?.questionCount ?? 0);
   const solved = $derived(sessionState?.session?.solved ?? false);
@@ -66,7 +68,6 @@
     askQuestionCommand.pending + submitGuessCommand.pending + requestHintCommand.pending > 0
   );
   const progressPct = $derived(round ? Math.min(100, (questionCount / round.maxQuestions) * 100) : 0);
-  const latestAnswer = $derived(questions.length > 0 ? questions[questions.length - 1] : null);
   const questionNumber = $derived(Math.min(round?.maxQuestions ?? 20, questionCount + 1));
   const canSubmit = $derived(Boolean(!pending && !solved && isOpenForPlay && inputText.trim()));
   const canSaveUsername = $derived(Boolean(usernameInput.trim().length >= 3));
@@ -139,6 +140,7 @@
     hint = '';
     feedback = '';
     inputText = '';
+    showEndLeaderboard = false;
 
     const usernameResult = await getUsernameQuery({ deviceId });
     username = usernameResult.username ?? '';
@@ -240,6 +242,11 @@
     }
   }
 
+  async function showLeaderboardForDay() {
+    showEndLeaderboard = true;
+    await leaderboardQuery.refresh();
+  }
+
   async function startRandomTestRound() {
     error = '';
     try {
@@ -297,14 +304,14 @@
   });
 </script>
 
-<main class="min-h-screen bg-zinc-50 px-6 py-10 text-zinc-900 sm:px-10 lg:px-16">
-  <div class="mx-auto grid min-h-[80vh] max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
-    <section class="rounded-[34px] bg-white px-8 py-10 shadow-[0_30px_90px_-36px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:px-12 sm:py-14">
-      <div class="h-1.5 overflow-hidden rounded-full bg-zinc-100">
-        <div class="h-full rounded-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
-      </div>
+<div class="fixed inset-x-0 top-0 z-40 h-1.5 bg-zinc-200/80">
+  <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
+</div>
 
-      <div class="mt-7 space-y-2">
+<main class="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900 sm:px-10 sm:py-14">
+  <div class="mx-auto min-h-[80vh] max-w-4xl">
+    <section class="rounded-[34px] bg-white px-8 py-10 shadow-[0_30px_90px_-36px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:px-12 sm:py-14">
+      <div class="space-y-2">
         <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">HVER ER MAÐURINN?</p>
         {#if roundReady && isOpenForPlay}
           <p class="text-sm text-zinc-500">Spurning {questionNumber} af {round?.maxQuestions ?? 20}</p>
@@ -351,24 +358,65 @@
               <p class="mt-3 rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-900">Vísbending: {hint}</p>
             {/if}
 
-            {#if latestAnswer}
-              <p class="mt-4 text-sm text-zinc-600"><strong>Síðasta:</strong> {latestAnswer.answerTextIs}</p>
-            {/if}
-
             {#if error}
               <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
             {/if}
           {:else if viewStep === 'solved'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Frábært! 🎉</h1>
+            <p class="mt-10 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-500">Svarið er</p>
+            <h1 class="mt-2 text-5xl font-semibold leading-[1.04] sm:text-7xl">{revealPerson?.displayName ?? 'Leik lokið'}</h1>
             <p class="mt-4 text-lg text-zinc-600">Þú leystir leik dagsins í {questionCount} spurningum.</p>
-            <div class="mt-8 flex items-center gap-3">
+            {#if revealPerson?.revealTextIs}
+              <p class="mt-2 text-zinc-600">{revealPerson.revealTextIs}</p>
+            {/if}
+
+            {#if revealPerson?.imageUrl && !revealImageFailed}
+              <div class="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
+                <img
+                  class="max-h-[24rem] w-full object-contain"
+                  src={revealPerson.imageUrl}
+                  alt={revealPerson.displayName}
+                  loading="lazy"
+                  decoding="async"
+                  referrerpolicy="no-referrer"
+                  onerror={() => {
+                    revealImageFailed = true;
+                  }}
+                />
+              </div>
+            {/if}
+
+            <div class="mt-8 flex flex-wrap items-center gap-3">
               <button class="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white" onclick={shareResult}>
                 Deila niðurstöðu
+              </button>
+              <button class="rounded-xl border border-zinc-300 bg-white px-6 py-3 text-sm font-semibold text-zinc-900" onclick={showLeaderboardForDay}>
+                Sjá stigatöflu dagsins
               </button>
               {#if shareStatus}
                 <span class="text-sm text-zinc-600">{shareStatus}</span>
               {/if}
             </div>
+
+            {#if showEndLeaderboard}
+              <div class="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
+                {#if myLeaderboardEntry}
+                  <p class="text-sm font-semibold text-zinc-700">Þín staða í dag: #{myLeaderboardEntry.rank}</p>
+                {/if}
+                <h2 class="mt-2 text-base font-semibold">Leaderboard</h2>
+                {#if leaderboard.length === 0}
+                  <p class="mt-2 text-sm text-zinc-600">Enginn búinn að leysa ennþá.</p>
+                {:else}
+                  <ul class="mt-2 space-y-2 text-sm">
+                    {#each leaderboard as row}
+                      <li class="flex items-center justify-between rounded-lg bg-white px-3 py-2">
+                        <span>#{row.rank} {row.username ? `@${row.username}` : ''}</span>
+                        <span>{row.questionsUsed}</span>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+            {/if}
           {:else if viewStep === 'scheduled'}
             <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Leikurinn opnar kl. 12:00</h1>
             <p class="mt-4 text-zinc-600">Ný persóna kemur á hádegi.</p>
@@ -379,89 +427,5 @@
         </div>
       {/key}
     </section>
-
-    <aside class="space-y-4">
-      <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Prófíll</p>
-        <label class="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500" for="username-input">
-          Username
-        </label>
-        <input
-          id="username-input"
-          class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-          bind:value={usernameInput}
-          placeholder="settu nafn (3-24)"
-        />
-        <div class="mt-2 flex items-center gap-2">
-          <button
-            class="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
-            onclick={saveUsername}
-            disabled={!canSaveUsername || setUsernameCommand.pending > 0}
-          >
-            Vista
-          </button>
-          {#if username}
-            <span class="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800">@{username}</span>
-          {/if}
-        </div>
-        {#if usernameError}
-          <p class="mt-2 text-xs text-red-600">{usernameError}</p>
-        {/if}
-      </section>
-
-      {#if revealPerson}
-        <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 class="text-base font-semibold">Maðurinn dagsins</h2>
-          <p class="mt-1 text-sm font-medium">{revealPerson.displayName}</p>
-          {#if !revealImageFailed && revealPerson.imageUrl}
-            <div class="mt-3 overflow-hidden rounded-lg bg-zinc-100">
-              <img
-                class="max-h-64 w-full object-contain"
-                src={revealPerson.imageUrl}
-                alt={revealPerson.displayName}
-                loading="lazy"
-                decoding="async"
-                referrerpolicy="no-referrer"
-                onerror={() => {
-                  revealImageFailed = true;
-                }}
-              />
-            </div>
-          {/if}
-        </section>
-      {/if}
-
-      {#if hasSubmitted || solved || round?.status === 'closed'}
-        <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 class="text-base font-semibold">Leaderboard</h2>
-          {#if leaderboard.length === 0}
-            <p class="mt-2 text-sm text-zinc-600">Enginn búinn að leysa ennþá.</p>
-          {:else}
-            <ul class="mt-2 space-y-2 text-sm">
-              {#each leaderboard as row}
-                <li class="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
-                  <span>#{row.rank} {row.username ? `@${row.username}` : ''}</span>
-                  <span>{row.questionsUsed}</span>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </section>
-      {/if}
-
-      {#if showLocalTestControls}
-        <details class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          <summary class="cursor-pointer font-semibold">Local test controls</summary>
-          <div class="mt-2 flex gap-2">
-            <button class="rounded-lg bg-amber-200 px-3 py-1 text-xs font-semibold" onclick={toggleLocalTestMode}>
-              {localTestMode ? 'Slökkva local test mode' : 'Kveikja local test mode'}
-            </button>
-            <button class="rounded-lg bg-amber-200 px-3 py-1 text-xs font-semibold" onclick={startRandomTestRound}>
-              Ný random prófunarlota
-            </button>
-          </div>
-        </details>
-      {/if}
-    </aside>
   </div>
 </main>
