@@ -383,10 +383,10 @@
   <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
 </div>
 
-<main class="min-h-screen bg-zinc-50 px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
-  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-3xl items-center justify-center sm:min-h-[calc(100vh-4rem)]">
-    <section class="w-full rounded-3xl bg-white px-5 py-7 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:rounded-[34px] sm:px-10 sm:py-12">
-      <div class="flex min-h-[60vh] flex-col justify-center sm:min-h-[52vh]">
+<main class="min-h-screen bg-white px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
+  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-2xl items-center justify-center sm:min-h-[calc(100vh-4rem)]">
+    <section class="w-full px-2 py-3 sm:rounded-[24px] sm:bg-zinc-50 sm:px-8 sm:py-10">
+      <div class="flex min-h-[68vh] flex-col justify-center sm:min-h-[58vh]">
           {#if viewStep === 'loading'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
           {:else if viewStep === 'username'}
@@ -395,20 +395,20 @@
               {username ? 'Staðfestu notendanafnið þitt eða breyttu því.' : 'Veldu notendanafn áður en þú byrjar.'}
             </p>
 
-            <form class="mt-10" onsubmit={confirmUsername}>
+            <form class="mt-8" onsubmit={confirmUsername}>
               <input
                 id="username"
                 name="username"
-                class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-4 text-4xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900"
+                class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-2xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 sm:text-4xl"
                 bind:value={usernameInput}
                 placeholder="notendanafn"
                 autocomplete="username"
                 autocapitalize="none"
                 spellcheck="false"
               />
-              <div class="mt-8 flex items-center gap-4">
+              <div class="mt-6 flex items-center gap-4">
                 <button
-                  class="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
+                  class="w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40 sm:w-auto"
                   disabled={setUsernameCommand.pending > 0}
                 >
                   {username ? 'Staðfesta' : 'Vista nafn'}
@@ -422,26 +422,26 @@
           {:else if viewStep === 'intro'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hver er maðurinn?</h1>
             <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">Þú hefur 20 spurningar.</p>
-            <button class="mt-10 rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white" onclick={startGame}>
+            <button class="mt-8 w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white sm:mt-10 sm:w-auto" onclick={startGame}>
               Byrja
             </button>
           {:else if viewStep === 'question'}
             <h1
-              class={`mt-10 font-semibold leading-[1.04] ${latestAnswerText || feedback ? 'text-4xl sm:text-5xl' : 'text-5xl sm:text-7xl'}`}
+              class={`mt-4 font-semibold leading-[1.08] sm:mt-8 ${latestAnswerText || feedback ? 'text-2xl sm:text-5xl' : 'text-4xl sm:text-7xl'}`}
             >
               {latestAnswerText || feedback || 'Hver er maðurinn?'}
             </h1>
 
-            <form class="mt-12" onsubmit={submitCurrent}>
+            <form class="mt-8" onsubmit={submitCurrent}>
               <input
-                class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-4 text-4xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900"
+                class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-2xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 sm:text-4xl"
                 bind:value={inputText}
                 placeholder="Skrifaðu svar..."
               />
 
-              <div class="mt-8 flex items-center gap-4">
+              <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
                 <button
-                  class="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
+                  class="w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40 sm:w-auto"
                   disabled={!canSubmit}
                 >
                   Áfram
@@ -451,15 +451,15 @@
             </form>
 
             {#if hint}
-              <p class="mt-3 rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-900">Vísbending: {hint}</p>
+              <p class="mt-3 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-800">Vísbending: {hint}</p>
             {/if}
 
             {#if error}
               <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
             {/if}
           {:else if viewStep === 'solved'}
-            <p class="mt-10 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-500">Svarið er</p>
-            <h1 class="mt-2 text-5xl font-semibold leading-[1.04] sm:text-7xl">{revealPerson?.displayName ?? 'Leik lokið'}</h1>
+            <p class="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 sm:mt-8 sm:text-sm">Svarið er</p>
+            <h1 class="mt-2 text-4xl font-semibold leading-[1.08] sm:text-7xl">{revealPerson?.displayName ?? 'Leik lokið'}</h1>
             <p class="mt-4 text-lg text-zinc-600">Þú leystir leik dagsins í {questionCount} spurningum.</p>
             {#if revealPerson?.revealTextIs}
               <p class="mt-2 text-zinc-600">{revealPerson.revealTextIs}</p>
@@ -481,11 +481,11 @@
               </div>
             {/if}
 
-            <div class="mt-8 flex flex-wrap items-center gap-3">
-              <button class="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white" onclick={shareResult}>
+            <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <button class="w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white sm:w-auto" onclick={shareResult}>
                 Deila niðurstöðu
               </button>
-              <button class="rounded-xl border border-zinc-300 bg-white px-6 py-3 text-sm font-semibold text-zinc-900" onclick={showLeaderboardForDay}>
+              <button class="w-full rounded-xl border border-zinc-300 bg-white px-6 py-3 text-sm font-semibold text-zinc-900 sm:w-auto" onclick={showLeaderboardForDay}>
                 Sjá stigatöflu dagsins
               </button>
               {#if shareStatus}
@@ -514,10 +514,10 @@
               </div>
             {/if}
           {:else if viewStep === 'scheduled'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Leikurinn opnar kl. 12:00</h1>
+            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leikurinn opnar kl. 12:00</h1>
             <p class="mt-4 text-zinc-600">Ný persóna kemur á hádegi.</p>
           {:else}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Leiknum er lokið í dag</h1>
+            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leiknum er lokið í dag</h1>
             <p class="mt-4 text-zinc-600">Næsti leikur opnar á morgun.</p>
           {/if}
         </div>
