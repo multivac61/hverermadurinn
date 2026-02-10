@@ -72,6 +72,14 @@
     askQuestionCommand.pending + submitGuessCommand.pending + requestHintCommand.pending > 0
   );
   const progressPct = $derived(round ? Math.min(100, (questionCount / round.maxQuestions) * 100) : 0);
+  const displayProgressPct = $derived.by(() => {
+    if (!round) return 0;
+    if (solved) return 100;
+    if (viewStep === 'intro') return 6;
+    if (viewStep === 'username') return 12;
+    if (viewStep === 'question') return Math.max(14, progressPct);
+    return Math.max(2, progressPct);
+  });
   const questionNumber = $derived(Math.min(round?.maxQuestions ?? 20, questionCount + 1));
   const canSubmit = $derived(Boolean(!pending && !solved && isOpenForPlay && inputText.trim()));
 
@@ -379,14 +387,14 @@
   });
 </script>
 
-<div class="fixed inset-x-0 top-0 z-40 h-1.5 bg-zinc-200/80">
-  <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
+<div class="fixed inset-x-0 top-0 z-40 h-[2px] bg-zinc-200/80">
+  <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${displayProgressPct}%`}></div>
 </div>
 
 <main class="min-h-screen bg-white px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
-  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-2xl items-center justify-center sm:min-h-[calc(100vh-4rem)]">
-    <section class="w-full px-2 py-3 sm:rounded-[24px] sm:bg-zinc-50 sm:px-8 sm:py-10">
-      <div class="flex min-h-[68vh] flex-col justify-center sm:min-h-[58vh]">
+  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-6xl items-center sm:min-h-[calc(100vh-4rem)]">
+    <section class="w-full px-1 py-2 sm:px-10 lg:px-20">
+      <div class="flex min-h-[68vh] w-full flex-col justify-center sm:min-h-[58vh]">
           {#if viewStep === 'loading'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
           {:else if viewStep === 'username'}
