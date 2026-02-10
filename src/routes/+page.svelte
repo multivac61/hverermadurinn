@@ -183,7 +183,7 @@
           question: parsed.value,
           forceRoundOpen: localTestMode
         });
-        feedback = `${result.answerLabel}: ${result.answerTextIs}`;
+        feedback = result.answerTextIs;
       }
 
       hasSubmitted = true;
@@ -313,7 +313,7 @@
       {/if}
 
       {#if latestAnswer}
-        <p class="mt-4 text-sm text-zinc-600"><strong>Síðasta:</strong> {latestAnswer.answerLabel} — {latestAnswer.answerTextIs}</p>
+        <p class="mt-4 text-sm text-zinc-600"><strong>Síðasta:</strong> {latestAnswer.answerTextIs}</p>
       {/if}
 
       {#if solved}
@@ -331,15 +331,7 @@
       <p class="mt-4 text-zinc-600">Næsti leikur opnar á morgun.</p>
     {/if}
 
-    {#if roundReady && round}
-      <div class="mt-8 flex flex-wrap gap-2 text-xs text-zinc-500">
-        <span class="rounded-full bg-zinc-100 px-3 py-1">Staða: <strong>{isOpenForPlay ? 'open' : round.status}</strong></span>
-        <span class="rounded-full bg-zinc-100 px-3 py-1">Spurningar: <strong>{questionCount}/{round.maxQuestions}</strong></span>
-        {#if round.status !== 'closed'}
-          <span class="rounded-full bg-zinc-100 px-3 py-1">Niðurtalning: <strong class="font-mono">{countdownText}</strong></span>
-        {/if}
-      </div>
-    {/if}
+
   </section>
 
   <details class="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
