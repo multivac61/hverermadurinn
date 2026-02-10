@@ -71,3 +71,14 @@ export const guessEvents = sqliteTable(
   },
   (t) => [index('idx_guess_events_session_created').on(t.sessionId, t.createdAt)]
 );
+
+export const usernames = sqliteTable(
+  'usernames',
+  {
+    deviceIdHash: text('device_id_hash').primaryKey(),
+    username: text('username').notNull(),
+    usernameNormalized: text('username_normalized').notNull().unique(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull()
+  },
+  (t) => [uniqueIndex('idx_usernames_username_normalized').on(t.usernameNormalized)]
+);

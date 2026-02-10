@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade, fly } from 'svelte/transition';
   import { onMount } from 'svelte';
   import {
     askQuestionCommand,
@@ -39,6 +40,7 @@
   let revealImageFailed = $state(false);
   let currentDeviceId = $state('');
   let username = $state('');
+  let shareStatus = $state('');
   let usernameInput = $state('');
   let usernameError = $state('');
   let hasSubmitted = $state(false);

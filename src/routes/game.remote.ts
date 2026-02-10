@@ -10,6 +10,7 @@ import {
   submitGuessDb,
   useHintDb
 } from '$lib/server/db/game';
+import { getUsernameByDeviceId, setUsernameForDeviceId } from '$lib/server/db/profile';
 import {
   askQuestion,
   getCurrentRound,
@@ -26,7 +27,9 @@ import {
   leaderboardQuerySchema,
   questionBodySchema,
   sessionStateQuerySchema,
-  startSessionBodySchema
+  startSessionBodySchema,
+  usernameQuerySchema,
+  usernameSetSchema
 } from '$lib/server/validation/game';
 
 function getServices() {
@@ -132,6 +135,19 @@ export const requestHintCommand = command(hintBodySchema, async (input) => {
   return db
     ? await useHintDb(db, input.sessionId, Date.now(), { forceRoundOpen: effectiveForceOpen })
     : useHint(input.sessionId, Date.now(), { forceOpen: effectiveForceOpen });
+});
+
+export const getUsernameQuery = query(usernameQuerySchema, async (input) => {
+  const { db } = getServices();
+  if (!db) return { username: null };
+  const username = await getUsernameByDeviceId(db, input.deviceId);
+  return { username };
+});
+
+export const setUsernameCommand = command(usernameSetSchema, async (input) => {
+  const { db } = getServices();
+  if (!db) throw new Error('DB_NOT_CONFIGURED');
+  return setUsernameForDeviceId(db, input);
 });
 
 export const getLeaderboardQuery = query(leaderboardQuerySchema, async (input) => {

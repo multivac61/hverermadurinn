@@ -175,6 +175,11 @@ export function isGenderQuestion(question: string) {
   return phrases.some((phrase) => q.includes(phrase));
 }
 
+export function isGenderRefusalAnswer(answerText: string) {
+  const t = normalize(answerText);
+  return t.includes('kyn') || t.includes('gender') || t.includes('he she');
+}
+
 export function answerQuestionForPerson(question: string, person: Person) {
   const q = normalize(question);
 

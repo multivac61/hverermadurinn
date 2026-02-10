@@ -1,6 +1,7 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { randomId } from '$lib/shared/id';
-import { deviceSessions, guessEvents, persons, questionEvents, rounds } from '$lib/server/db/schema';
+import { hashDeviceId } from '$lib/server/device';
+import { deviceSessions, guessEvents, persons, questionEvents, rounds, usernames } from '$lib/server/db/schema';
 import {
   MAX_QUESTIONS,
   PERSONS,
@@ -22,15 +23,6 @@ type AnswerResolver = (input: { question: string; person: any }) => Promise<Answ
 type RoundRuntimeOptions = {
   forceRoundOpen?: boolean;
 };
-
-function hashDeviceId(input: string) {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i += 1) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return String(Math.abs(h));
-}
 
 function parseRoundOpen(roundId: string) {
   return new Date(`${roundId}T12:00:00.000Z`).getTime();
@@ -344,6 +336,7 @@ export async function getLeaderboardDb(db: Db, roundId: string) {
   const rows = await db
     .select({
       sessionId: deviceSessions.id,
+      deviceIdHash: deviceSessions.deviceIdHash,
       questionCount: deviceSessions.questionCount,
       startedAt: deviceSessions.startedAt,
       solvedAt: deviceSessions.solvedAt
@@ -352,6 +345,15 @@ export async function getLeaderboardDb(db: Db, roundId: string) {
     .where(and(eq(deviceSessions.roundId, roundId), eq(deviceSessions.solved, true)))
     .orderBy(asc(deviceSessions.questionCount), asc(deviceSessions.solvedAt));
 
+  const hashes = [...new Set(rows.map((row: any) => String(row.deviceIdHash)).filter(Boolean))] as string[];
+  const usernameRows = hashes.length
+    ? await db
+        .select({ deviceIdHash: usernames.deviceIdHash, username: usernames.username })
+        .from(usernames)
+        .where(inArray(usernames.deviceIdHash, hashes))
+    : [];
+  const usernameByHash = new Map(usernameRows.map((row: any) => [row.deviceIdHash, row.username]));
+
   return rows
     .filter((row: any) => row.solvedAt)
     .map((row: any) => {
@@ -359,6 +361,7 @@ export async function getLeaderboardDb(db: Db, roundId: string) {
       const solvedAtMs = row.solvedAt?.getTime() ?? startedAtMs;
       return {
         sessionId: row.sessionId,
+        username: usernameByHash.get(row.deviceIdHash) ?? null,
         questionsUsed: row.questionCount,
         timeFromStartMs: solvedAtMs - startedAtMs,
         timeFromOpenMs: solvedAtMs - openMs,
