@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { fade, fly } from 'svelte/transition';
   import { onMount } from 'svelte';
   import {
     askQuestionCommand,
@@ -46,6 +45,8 @@
   let showIntro = $state(true);
   let shareStatus = $state('');
   let showEndLeaderboard = $state(false);
+  let usernameConfirmed = $state(false);
+  let sessionReady = $state(false);
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
@@ -70,7 +71,6 @@
   const progressPct = $derived(round ? Math.min(100, (questionCount / round.maxQuestions) * 100) : 0);
   const questionNumber = $derived(Math.min(round?.maxQuestions ?? 20, questionCount + 1));
   const canSubmit = $derived(Boolean(!pending && !solved && isOpenForPlay && inputText.trim()));
-  const canSaveUsername = $derived(Boolean(usernameInput.trim().length >= 3));
 
   const debugForceRoundOpen = $derived(Boolean((roundQuery.current as any)?.debug?.forceRoundOpen));
   const debugRandomRoundEnabled = $derived(
@@ -81,7 +81,9 @@
   const viewStep = $derived.by(() => {
     if (!roundReady) return 'loading';
     if (!isOpenForPlay) return round?.status === 'scheduled' ? 'scheduled' : 'closed';
+    if (!sessionReady) return 'loading';
     if (showIntro) return 'intro';
+    if (!usernameConfirmed) return 'username';
     if (solved) return 'solved';
     return 'question';
   });
@@ -124,6 +126,7 @@
   }
 
   async function initializeSession(randomizeRound = false) {
+    sessionReady = false;
     const deviceId = randomizeRound ? `anon-${randomId()}` : getDeviceId();
     currentDeviceId = deviceId;
 
@@ -141,6 +144,7 @@
     feedback = '';
     inputText = '';
     showEndLeaderboard = false;
+    usernameConfirmed = false;
 
     const usernameResult = await getUsernameQuery({ deviceId });
     username = usernameResult.username ?? '';
@@ -149,6 +153,7 @@
 
     await sessionStateQuery;
     await leaderboardQuery.refresh();
+    sessionReady = true;
   }
 
   function parseSingleInput(raw: string) {
@@ -209,14 +214,35 @@
     }
   }
 
-  async function saveUsername() {
-    if (!currentDeviceId || !canSaveUsername) return;
+  async function confirmUsername(event?: SubmitEvent) {
+    event?.preventDefault();
     usernameError = '';
+    if (!currentDeviceId) {
+      usernameError = 'Villa: auðkenni tækis fannst ekki. Endurhlaðið síðuna.';
+      return;
+    }
+
+    const candidate = usernameInput.trim();
+
+    if (!candidate) {
+      if (username) {
+        usernameConfirmed = true;
+        return;
+      }
+      usernameError = 'Sláðu inn notendanafn.';
+      return;
+    }
+
+    if (candidate === username) {
+      usernameConfirmed = true;
+      return;
+    }
 
     try {
-      const result = await setUsernameCommand({ deviceId: currentDeviceId, username: usernameInput });
+      const result = await setUsernameCommand({ deviceId: currentDeviceId, username: candidate });
       username = result.username;
       usernameInput = result.username;
+      usernameConfirmed = true;
       await leaderboardQuery.refresh();
     } catch (e) {
       usernameError = (e as Error).message;
@@ -308,17 +334,45 @@
   <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
 </div>
 
-<main class="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900 sm:px-10 sm:py-14">
-  <div class="mx-auto min-h-[80vh] max-w-4xl">
-    <section class="rounded-[34px] bg-white px-8 py-10 shadow-[0_30px_90px_-36px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:px-12 sm:py-14">
-      {#key viewStep}
-        <div in:fly={{ y: 10, duration: 180 }} out:fade={{ duration: 120 }}>
+<main class="min-h-screen bg-zinc-50 px-6 py-8 text-zinc-900 sm:px-10">
+  <div class="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-4xl items-center justify-center">
+    <section class="min-h-[70vh] w-full rounded-[34px] bg-white px-8 py-10 shadow-[0_30px_90px_-36px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:px-12 sm:py-14">
+      <div class="flex min-h-[52vh] flex-col justify-center">
           {#if viewStep === 'loading'}
             <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hleð stöðu leiks...</h1>
+          {:else if viewStep === 'username'}
+            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hvað á ég að kalla þig?</h1>
+            <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">
+              {username ? 'Staðfestu notendanafnið þitt eða breyttu því.' : 'Veldu notendanafn áður en þú byrjar.'}
+            </p>
+
+            <form class="mt-10" onsubmit={confirmUsername}>
+              <input
+                id="username"
+                name="username"
+                class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-4 text-4xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900"
+                bind:value={usernameInput}
+                placeholder="notendanafn"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+              />
+              <div class="mt-8 flex items-center gap-4">
+                <button
+                  class="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
+                  disabled={setUsernameCommand.pending > 0}
+                >
+                  {username ? 'Staðfesta' : 'Vista nafn'}
+                </button>
+              </div>
+            </form>
+
+            {#if usernameError}
+              <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{usernameError}</p>
+            {/if}
           {:else if viewStep === 'intro'}
-            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">
-              Þú hefur 20 spurningar til að komast að því hver maðurinn er
-            </h1>
+            <h1 class="mt-10 text-5xl font-semibold leading-[1.04] sm:text-7xl">Hver er maðurinn?</h1>
+            <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">Þú hefur 20 spurningar.</p>
             <button class="mt-10 rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white" onclick={startGame}>
               Byrja
             </button>
@@ -418,7 +472,6 @@
             <p class="mt-4 text-zinc-600">Næsti leikur opnar á morgun.</p>
           {/if}
         </div>
-      {/key}
     </section>
   </div>
 </main>
