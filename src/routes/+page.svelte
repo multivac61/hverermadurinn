@@ -34,13 +34,16 @@
   let revealedFromGuess = $state<RevealPerson | null>(null);
   let leaderboardRoundId = $state('');
   let localTestMode = $state(false);
+  let revealImageFailed = $state(false);
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
 
   const roundReady = $derived(roundQuery.ready);
   const round = $derived((roundQuery.current?.round as Round | undefined) ?? null);
-  const revealFromRound = $derived((roundQuery.current?.revealPerson as RevealPerson | null | undefined) ?? null);
+  const revealFromRound = $derived(
+    (roundQuery.current?.revealPerson as RevealPerson | null | undefined) ?? null
+  );
   const revealPerson = $derived(revealedFromGuess ?? revealFromRound);
   const leaderboard = $derived((leaderboardQuery.current?.leaderboard as any[]) ?? []);
   const sessionState = $derived(sessionStateQuery?.current ?? null);
@@ -54,17 +57,25 @@
   );
   const progressPct = $derived(round ? Math.min(100, (questionCount / round.maxQuestions) * 100) : 0);
   const latestAnswer = $derived(questions.length > 0 ? questions[questions.length - 1] : null);
-  const questionNumber = $derived(Math.min((round?.maxQuestions ?? 20), questionCount + 1));
+  const questionNumber = $derived(Math.min(round?.maxQuestions ?? 20, questionCount + 1));
   const canSubmit = $derived(Boolean(!pending && !solved && isOpenForPlay && inputText.trim()));
 
   const debugForceRoundOpen = $derived(Boolean((roundQuery.current as any)?.debug?.forceRoundOpen));
-  const debugRandomRoundEnabled = $derived(Boolean((roundQuery.current as any)?.debug?.devRandomRoundPerSession));
+  const debugRandomRoundEnabled = $derived(
+    Boolean((roundQuery.current as any)?.debug?.devRandomRoundPerSession)
+  );
 
   $effect(() => {
     if (round?.id && round.id !== leaderboardRoundId) {
       leaderboardRoundId = round.id;
       leaderboardQuery = getLeaderboardQuery({ roundId: round.id });
     }
+  });
+
+  $effect(() => {
+    const imageUrl = revealPerson?.imageUrl;
+    revealImageFailed = false;
+    void imageUrl;
   });
 
   function getDeviceId() {
@@ -120,9 +131,7 @@
     }
 
     const guessMatch = input.match(/^(gisk|giska|guess)\s*:\s*(.+)$/i);
-    if (guessMatch) {
-      return { kind: 'guess' as const, value: guessMatch[2].trim() };
-    }
+    if (guessMatch) return { kind: 'guess' as const, value: guessMatch[2].trim() };
 
     return { kind: 'question' as const, value: input };
   }
@@ -167,10 +176,6 @@
     } catch (e) {
       error = (e as Error).message;
     }
-  }
-
-  function fillSuggestion(value: string) {
-    inputText = value;
   }
 
   async function startRandomTestRound() {
@@ -230,100 +235,81 @@
   });
 </script>
 
-<main class="mx-auto min-h-screen max-w-5xl px-4 py-8">
-  <section class="rounded-[32px] border border-zinc-200 bg-white p-6 shadow-sm sm:p-10">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-500">HVER ER MAÐURINN?</p>
-      {#if roundReady && round}
-        <div class="flex flex-wrap gap-2 text-xs text-zinc-600">
-          <span class="rounded-full bg-zinc-100 px-3 py-1">Staða: <strong>{isOpenForPlay ? 'open' : round.status}</strong></span>
-          <span class="rounded-full bg-zinc-100 px-3 py-1">Spurning {questionNumber}/{round.maxQuestions}</span>
-          {#if round.status !== 'closed'}
-            <span class="rounded-full bg-zinc-100 px-3 py-1">Niðurtalning: <strong class="font-mono">{countdownText}</strong></span>
-          {/if}
-        </div>
-      {/if}
+<main class="mx-auto flex min-h-screen max-w-4xl flex-col justify-center px-4 py-8 sm:py-12">
+  <section class="rounded-[36px] border border-zinc-200 bg-white px-6 py-10 shadow-sm sm:px-12 sm:py-14">
+    <div class="mb-7 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+      <div class="h-full rounded-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
     </div>
 
-    <div class="mt-6 h-2 overflow-hidden rounded-full bg-zinc-100">
-      <div class="h-full rounded-full bg-zinc-900 transition-all duration-300" style={`width:${progressPct}%`}></div>
-    </div>
+    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">HVER ER MAÐURINN?</p>
 
     {#if !roundReady}
-      <p class="mt-10 text-zinc-700">Hleð stöðu leiks...</p>
+      <h1 class="mt-6 text-4xl font-semibold text-zinc-900 sm:text-6xl">Hleð stöðu leiks...</h1>
     {:else if isOpenForPlay}
-      <div class="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div>
-          <h1 class="text-4xl font-semibold leading-tight text-zinc-900 sm:text-5xl">Spyrðu eina spurningu í einu</h1>
-          <p class="mt-3 text-zinc-600">Sama form fyrir allt: venjuleg spurning, <strong>gisk: Nafn</strong> eða <strong>vísbending</strong>.</p>
+      <p class="mt-6 text-sm text-zinc-500">Spurning {questionNumber} af {round?.maxQuestions ?? 20}</p>
+      <h1 class="mt-2 text-4xl font-semibold leading-tight text-zinc-900 sm:text-6xl">Skrifaðu svar</h1>
+      <p class="mt-3 text-zinc-600">Spurning, <strong>gisk: Nafn</strong> eða <strong>vísbending</strong> — allt í einu formi.</p>
 
-          <form class="mt-8" onsubmit={submitCurrent}>
-            <input
-              class="w-full rounded-2xl border border-zinc-300 px-5 py-4 text-lg outline-none ring-indigo-200 transition focus:ring"
-              bind:value={inputText}
-              placeholder="Skrifaðu næsta skref..."
-              onkeydown={(e) => e.key === 'Tab' && inputText.trim() === '' && fillSuggestion('vísbending')}
-            />
-            <button
-              class="mt-3 w-full rounded-2xl bg-zinc-900 px-4 py-3 text-base font-medium text-white transition disabled:opacity-40"
-              disabled={!canSubmit}
-            >
-              Halda áfram
-            </button>
-          </form>
-
-          <div class="mt-3 flex flex-wrap gap-2 text-xs">
-            <button class="rounded-full bg-zinc-100 px-3 py-1 text-zinc-700" onclick={() => fillSuggestion('vísbending')}>
-              vísbending
-            </button>
-            <button class="rounded-full bg-zinc-100 px-3 py-1 text-zinc-700" onclick={() => fillSuggestion('gisk: ')}>
-              gisk: nafn
-            </button>
-            <button class="rounded-full bg-zinc-100 px-3 py-1 text-zinc-700" onclick={() => fillSuggestion('Er manneskjan úr tónlist?')}>
-              dæmi-spurning
-            </button>
-          </div>
-
-          {#if hint}
-            <p class="mt-4 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-900">Vísbending: {hint}</p>
-          {/if}
-
-          {#if feedback}
-            <p class="mt-4 rounded-xl bg-zinc-100 p-3 text-sm">{feedback}</p>
-          {/if}
-
-          {#if latestAnswer}
-            <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm">
-              <p><strong>Q:</strong> {latestAnswer.question}</p>
-              <p class="mt-1"><strong>{latestAnswer.answerLabel}:</strong> {latestAnswer.answerTextIs}</p>
-            </div>
-          {/if}
-
-          {#if solved}
-            <p class="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">Þú leystir gátuna! 🎉</p>
-          {/if}
-
-          {#if error}
-            <p class="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>
-          {/if}
+      <form class="mt-9" onsubmit={submitCurrent}>
+        <input
+          class="w-full rounded-2xl border border-zinc-300 px-5 py-4 text-2xl outline-none ring-indigo-200 transition focus:border-zinc-500 focus:ring"
+          bind:value={inputText}
+          placeholder="Skrifaðu hér..."
+        />
+        <div class="mt-4 flex items-center gap-3">
+          <button
+            class="rounded-2xl bg-zinc-900 px-6 py-3 text-base font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
+            disabled={!canSubmit}
+          >
+            Halda áfram
+          </button>
+          <p class="text-xs text-zinc-500">ENTER</p>
         </div>
+      </form>
 
-        <aside class="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
-          <h2 class="font-semibold text-zinc-900">Leiðbeiningar</h2>
-          <ul class="mt-2 space-y-2">
-            <li>• Hámark {round?.maxQuestions ?? 20} spurningar.</li>
-            <li>• Skrifaðu <strong>gisk: Nafn</strong> til að giska.</li>
-            <li>• Skrifaðu <strong>vísbending</strong> einu sinni.</li>
-            <li>• Markmið: leysa sem fyrst.</li>
-          </ul>
-        </aside>
+      <div class="mt-4 flex flex-wrap gap-2 text-xs">
+        <button class="rounded-full bg-zinc-100 px-3 py-1 text-zinc-700" onclick={() => (inputText = 'vísbending')}>vísbending</button>
+        <button class="rounded-full bg-zinc-100 px-3 py-1 text-zinc-700" onclick={() => (inputText = 'gisk: ')}>gisk: nafn</button>
       </div>
+
+      {#if feedback}
+        <p class="mt-5 rounded-xl bg-zinc-100 p-3 text-sm">{feedback}</p>
+      {/if}
+
+      {#if hint}
+        <p class="mt-3 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-900">Vísbending: {hint}</p>
+      {/if}
+
+      {#if latestAnswer}
+        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+          <p><strong>Q:</strong> {latestAnswer.question}</p>
+          <p class="mt-1"><strong>{latestAnswer.answerLabel}:</strong> {latestAnswer.answerTextIs}</p>
+        </div>
+      {/if}
+
+      {#if solved}
+        <p class="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">Þú leystir gátuna! 🎉</p>
+      {/if}
+
+      {#if error}
+        <p class="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>
+      {/if}
     {:else if round?.status === 'scheduled'}
-      <h1 class="mt-8 text-4xl font-semibold leading-tight text-zinc-900 sm:text-5xl">Leikurinn opnar kl. 12:00</h1>
-      <p class="mt-3 text-zinc-600">Bíddu aðeins — ný persóna kemur á hádegi.</p>
+      <h1 class="mt-6 text-4xl font-semibold leading-tight text-zinc-900 sm:text-6xl">Leikurinn opnar kl. 12:00</h1>
+      <p class="mt-3 text-zinc-600">Ný persóna kemur á hádegi.</p>
     {:else}
-      <h1 class="mt-8 text-4xl font-semibold leading-tight text-zinc-900 sm:text-5xl">Leiknum er lokið í dag</h1>
+      <h1 class="mt-6 text-4xl font-semibold leading-tight text-zinc-900 sm:text-6xl">Leiknum er lokið í dag</h1>
       <p class="mt-3 text-zinc-600">Næsti leikur opnar á morgun.</p>
+    {/if}
+
+    {#if roundReady && round}
+      <div class="mt-8 flex flex-wrap gap-2 text-xs text-zinc-600">
+        <span class="rounded-full bg-zinc-100 px-3 py-1">Staða: <strong>{isOpenForPlay ? 'open' : round.status}</strong></span>
+        <span class="rounded-full bg-zinc-100 px-3 py-1">Spurningar: <strong>{questionCount}/{round.maxQuestions}</strong></span>
+        {#if round.status !== 'closed'}
+          <span class="rounded-full bg-zinc-100 px-3 py-1">Niðurtalning: <strong class="font-mono">{countdownText}</strong></span>
+        {/if}
+      </div>
     {/if}
   </section>
 
@@ -332,26 +318,45 @@
       <h2 class="text-xl font-semibold">Maðurinn dagsins</h2>
       <p class="mt-2 text-lg font-medium">{revealPerson.displayName}</p>
       <p class="mt-1 text-zinc-700">{revealPerson.revealTextIs}</p>
-      <img class="mt-4 max-h-80 rounded-xl object-cover" src={revealPerson.imageUrl} alt={revealPerson.displayName} />
+
+      {#if !revealImageFailed && revealPerson.imageUrl}
+        <div class="mt-4 overflow-hidden rounded-xl bg-zinc-100">
+          <img
+            class="max-h-[28rem] w-full object-contain"
+            src={revealPerson.imageUrl}
+            alt={revealPerson.displayName}
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+            onerror={() => {
+              revealImageFailed = true;
+            }}
+          />
+        </div>
+      {:else}
+        <div class="mt-4 rounded-xl bg-zinc-100 p-4 text-sm text-zinc-600">Mynd ekki tiltæk eins og er.</div>
+      {/if}
     </section>
   {/if}
 
-  <details class="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
-    <summary class="cursor-pointer text-xl font-semibold">Leaderboard (dagurinn)</summary>
-    {#if leaderboard.length === 0}
-      <p class="mt-3 text-zinc-600">Enginn búinn að leysa ennþá.</p>
-    {:else}
-      <ul class="mt-3 space-y-2 text-sm">
-        {#each leaderboard as row}
-          <li class="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
-            <span>#{row.rank}</span>
-            <span>{row.questionsUsed} spurningar</span>
-            <span>{msToText(row.timeFromStartMs)}</span>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </details>
+  {#if solved || round?.status === 'closed'}
+    <section class="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
+      <h2 class="text-xl font-semibold">Leaderboard (dagurinn)</h2>
+      {#if leaderboard.length === 0}
+        <p class="mt-3 text-zinc-600">Enginn búinn að leysa ennþá.</p>
+      {:else}
+        <ul class="mt-3 space-y-2 text-sm">
+          {#each leaderboard as row}
+            <li class="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
+              <span>#{row.rank}</span>
+              <span>{row.questionsUsed} spurningar</span>
+              <span>{msToText(row.timeFromStartMs)}</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  {/if}
 
   <details class="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
     <summary class="cursor-pointer font-semibold">Local test controls</summary>
