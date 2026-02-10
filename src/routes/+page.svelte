@@ -50,8 +50,8 @@
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
 
-  const roundReady = $derived(roundQuery.ready);
   const round = $derived((roundQuery.current?.round as Round | undefined) ?? null);
+  const roundReady = $derived(Boolean(round));
   const revealFromRound = $derived(
     (roundQuery.current?.revealPerson as RevealPerson | null | undefined) ?? null
   );
