@@ -311,13 +311,6 @@
 <main class="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900 sm:px-10 sm:py-14">
   <div class="mx-auto min-h-[80vh] max-w-4xl">
     <section class="rounded-[34px] bg-white px-8 py-10 shadow-[0_30px_90px_-36px_rgba(0,0,0,0.35)] ring-1 ring-zinc-200 sm:px-12 sm:py-14">
-      <div class="space-y-2">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">HVER ER MAÐURINN?</p>
-        {#if roundReady && isOpenForPlay}
-          <p class="text-sm text-zinc-500">Spurning {questionNumber} af {round?.maxQuestions ?? 20}</p>
-        {/if}
-      </div>
-
       {#key viewStep}
         <div in:fly={{ y: 10, duration: 180 }} out:fade={{ duration: 120 }}>
           {#if viewStep === 'loading'}
