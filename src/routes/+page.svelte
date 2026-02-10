@@ -186,6 +186,7 @@
         feedback = `${result.answerLabel}: ${result.answerTextIs}`;
       }
 
+      hasSubmitted = true;
       inputText = '';
       await sessionStateQuery?.refresh();
       await leaderboardQuery.refresh();
@@ -266,79 +267,45 @@
   });
 </script>
 
-<main class="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-6 py-10">
-  <section class="rounded-[28px] border border-zinc-200 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-12">
+<main class="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-4 py-8 sm:px-6 sm:py-12">
+  <section class="rounded-[34px] bg-white px-6 py-8 shadow-[0_20px_70px_-28px_rgba(0,0,0,0.25)] ring-1 ring-zinc-200 sm:px-10 sm:py-12">
     <div class="h-1.5 overflow-hidden rounded-full bg-zinc-100">
-      <div class="h-full rounded-full bg-zinc-900 transition-all duration-500" style={`width:${progressPct}%`}></div>
+      <div class="h-full rounded-full bg-indigo-600 transition-all duration-500" style={`width:${progressPct}%`}></div>
     </div>
 
     <div class="mt-7 space-y-2">
-      <p class="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">HVER ER MAÐURINN?</p>
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">HVER ER MAÐURINN?</p>
       {#if roundReady && isOpenForPlay}
         <p class="text-sm text-zinc-500">Spurning {questionNumber} af {round?.maxQuestions ?? 20}</p>
       {/if}
     </div>
 
-    <div class="mt-5 flex flex-wrap items-end gap-2 rounded-xl bg-zinc-50 p-3">
-      <div class="min-w-44 flex-1">
-        <label class="block text-[11px] font-semibold uppercase tracking-wide text-zinc-500" for="username-input">Username</label>
-        <input
-          id="username-input"
-          class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-          bind:value={usernameInput}
-          placeholder="settu nafn (3-24)"
-        />
-      </div>
-      <button
-        class="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
-        onclick={saveUsername}
-        disabled={!canSaveUsername || setUsernameCommand.pending > 0}
-      >
-        Vista
-      </button>
-      {#if username}
-        <span class="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800">@{username}</span>
-      {/if}
-    </div>
-    {#if usernameError}
-      <p class="mt-2 text-xs text-red-600">{usernameError}</p>
-    {/if}
 
     {#if !roundReady}
       <h1 class="mt-10 text-4xl font-semibold text-zinc-900 sm:text-6xl">Hleð stöðu leiks...</h1>
     {:else if isOpenForPlay}
-      <h1 class="mt-8 text-4xl font-semibold leading-[1.08] text-zinc-900 sm:text-6xl">Hver er manneskjan?</h1>
-      <p class="mt-4 text-zinc-600">Skrifaðu spurningu, <strong>gisk: Nafn</strong> eða <strong>vísbending</strong>.</p>
+      <h1 class="mt-10 text-5xl font-semibold leading-[1.04] text-zinc-900 sm:text-7xl">Hver er maðurinn?</h1>
 
-      <form class="mt-10" onsubmit={submitCurrent}>
+      <form class="mt-12" onsubmit={submitCurrent}>
         <input
-          class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-3xl font-medium text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-900"
+          class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-4 text-4xl font-medium text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-900"
           bind:value={inputText}
-          placeholder="Skrifaðu hér..."
+          placeholder="Skrifaðu svar..."
         />
 
-        <div class="mt-6 flex items-center justify-between gap-4">
+        <div class="mt-8 flex items-center gap-4">
           <button
-            class="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
+            class="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
             disabled={!canSubmit}
           >
-            Halda áfram
+            Áfram
           </button>
           <span class="text-xs text-zinc-500">ENTER ↵</span>
         </div>
       </form>
 
-      <div class="mt-5 flex flex-wrap gap-2">
-        <button class="rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-600" onclick={() => (inputText = 'vísbending')}>
-          vísbending
-        </button>
-        <button class="rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-600" onclick={() => (inputText = 'gisk: ')}>
-          gisk: nafn
-        </button>
-      </div>
-
       {#if feedback}
-        <p class="mt-5 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-700">{feedback}</p>
+        <p class="mt-8 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-700">{feedback}</p>
       {/if}
 
       {#if hint}
@@ -375,6 +342,34 @@
     {/if}
   </section>
 
+  <details class="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
+    <summary class="cursor-pointer font-semibold">Prófíll / username</summary>
+    <div class="mt-3 flex flex-wrap items-end gap-2">
+      <div class="min-w-44 flex-1">
+        <label class="block text-[11px] font-semibold uppercase tracking-wide text-zinc-500" for="username-input">Username</label>
+        <input
+          id="username-input"
+          class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+          bind:value={usernameInput}
+          placeholder="settu nafn (3-24)"
+        />
+      </div>
+      <button
+        class="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+        onclick={saveUsername}
+        disabled={!canSaveUsername || setUsernameCommand.pending > 0}
+      >
+        Vista
+      </button>
+      {#if username}
+        <span class="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800">@{username}</span>
+      {/if}
+    </div>
+    {#if usernameError}
+      <p class="mt-2 text-xs text-red-600">{usernameError}</p>
+    {/if}
+  </details>
+
   {#if revealPerson}
     <section class="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
       <h2 class="text-xl font-semibold">Maðurinn dagsins</h2>
@@ -401,7 +396,7 @@
     </section>
   {/if}
 
-  {#if solved || round?.status === 'closed'}
+  {#if hasSubmitted || solved || round?.status === 'closed'}
     <section class="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
       <h2 class="text-xl font-semibold">Leaderboard (dagurinn)</h2>
       {#if leaderboard.length === 0}
