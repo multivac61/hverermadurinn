@@ -143,25 +143,36 @@ export function getPersonById(personId: string): Person | null {
 
 export function isGenderQuestion(question: string) {
   const q = normalize(question);
-  const genderTerms = [
+  const tokens = q.split(' ').filter(Boolean);
+  const tokenSet = new Set(tokens);
+
+  // exact-token checks only (avoid false positives like "manneskja" -> "man")
+  const exactTerms = [
     'kona',
     'karl',
-    'kven',
+    'karlmadur',
+    'kvenmadur',
     'karlkyn',
     'kvenkyn',
     'kk',
     'kvk',
     'male',
     'female',
-    'man',
     'woman',
+    'boy',
+    'girl',
     'hann',
     'hun',
     'hún',
     'stelpa',
     'drengur'
   ];
-  return genderTerms.some((term) => q.includes(normalize(term)));
+
+  if (exactTerms.some((term) => tokenSet.has(normalize(term)))) return true;
+
+  // explicit gender phrases
+  const phrases = ['hvada kyn', 'hvada kyni', 'what gender', 'is he', 'is she'];
+  return phrases.some((phrase) => q.includes(phrase));
 }
 
 export function answerQuestionForPerson(question: string, person: Person) {
