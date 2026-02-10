@@ -214,7 +214,7 @@
     }
   }
 
-  async function confirmUsername(event?: SubmitEvent) {
+  async function confirmUsername(event?: Event) {
     event?.preventDefault();
     usernameError = '';
     if (!currentDeviceId) {
@@ -222,7 +222,19 @@
       return;
     }
 
-    const candidate = usernameInput.trim();
+    let candidate = usernameInput.trim();
+    if (!candidate) {
+      const formEl =
+        event?.currentTarget instanceof HTMLFormElement
+          ? event.currentTarget
+          : event?.target instanceof HTMLElement
+            ? event.target.closest('form')
+            : null;
+      if (formEl) {
+        const fd = new FormData(formEl);
+        candidate = String(fd.get('username') ?? '').trim();
+      }
+    }
 
     if (!candidate) {
       if (username) {
@@ -238,15 +250,19 @@
       return;
     }
 
-    try {
-      const result = await setUsernameCommand({ deviceId: currentDeviceId, username: candidate });
-      username = result.username;
-      usernameInput = result.username;
-      usernameConfirmed = true;
-      await leaderboardQuery.refresh();
-    } catch (e) {
-      usernameError = (e as Error).message;
+    const result = await setUsernameCommand({ deviceId: currentDeviceId, username: candidate });
+    if (!result.ok) {
+      usernameError =
+        result.error === 'USERNAME_TAKEN'
+          ? 'Þetta notendanafn er þegar tekið.'
+          : 'Ekki tókst að vista notendanafn. Reyndu aftur.';
+      return;
     }
+
+    username = result.username;
+    usernameInput = result.username;
+    usernameConfirmed = true;
+    await leaderboardQuery.refresh();
   }
 
   function startGame() {

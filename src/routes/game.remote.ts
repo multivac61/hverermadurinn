@@ -146,8 +146,20 @@ export const getUsernameQuery = query(usernameQuerySchema, async (input) => {
 
 export const setUsernameCommand = command(usernameSetSchema, async (input) => {
   const { db } = getServices();
-  if (!db) throw new Error('DB_NOT_CONFIGURED');
-  return setUsernameForDeviceId(db, input);
+  if (!db) {
+    return { ok: false as const, error: 'DB_NOT_CONFIGURED' as const };
+  }
+
+  try {
+    const result = await setUsernameForDeviceId(db, input);
+    return { ok: true as const, username: result.username };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
+    if (message === 'USERNAME_TAKEN') {
+      return { ok: false as const, error: 'USERNAME_TAKEN' as const };
+    }
+    return { ok: false as const, error: 'UNKNOWN_ERROR' as const };
+  }
 });
 
 export const getLeaderboardQuery = query(leaderboardQuerySchema, async (input) => {
