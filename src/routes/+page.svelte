@@ -47,6 +47,7 @@
   let showEndLeaderboard = $state(false);
   let usernameConfirmed = $state(false);
   let sessionReady = $state(false);
+  let localQuestionCount = $state(0);
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
@@ -63,21 +64,22 @@
   const questionCount = $derived(sessionState?.session?.questionCount ?? 0);
   const solved = $derived(sessionState?.session?.solved ?? false);
   const questions = $derived(sessionState?.questions ?? []);
+  const effectiveQuestionCount = $derived(Math.max(questionCount, questions.length, localQuestionCount));
   const latestAnswerText = $derived(
     questions.length > 0 ? String(questions[questions.length - 1]?.answerTextIs ?? '') : ''
   );
-  const remainingQuestions = $derived(round ? Math.max(0, round.maxQuestions - questionCount) : 0);
+  const remainingQuestions = $derived(round ? Math.max(0, round.maxQuestions - effectiveQuestionCount) : 0);
   const isOpenForPlay = $derived(Boolean(localTestMode || round?.status === 'open'));
   const pending = $derived(
     askQuestionCommand.pending + submitGuessCommand.pending + requestHintCommand.pending > 0
   );
-  const progressPct = $derived(round ? Math.min(100, (questionCount / round.maxQuestions) * 100) : 0);
+  const progressPct = $derived(round ? Math.min(100, (effectiveQuestionCount / round.maxQuestions) * 100) : 0);
   const displayProgressPct = $derived.by(() => {
     if (!round) return 0;
     if (solved) return 100;
     if (viewStep === 'intro') return 6;
-    if (viewStep === 'username') return 12;
-    if (viewStep === 'question') return Math.max(14, progressPct);
+    if (viewStep === 'username') return 10;
+    if (viewStep === 'question') return Math.min(99, 10 + progressPct * 0.9);
     return Math.max(2, progressPct);
   });
   const questionNumber = $derived(Math.min(round?.maxQuestions ?? 20, questionCount + 1));
@@ -156,6 +158,7 @@
     inputText = '';
     showEndLeaderboard = false;
     usernameConfirmed = false;
+    localQuestionCount = 0;
 
     const usernameResult = await getUsernameQuery({ deviceId });
     username = usernameResult.username ?? '';
@@ -217,7 +220,6 @@
 
     showIntro = false;
     error = '';
-    feedback = '';
 
     const parsed = parseSingleInput(inputText);
 
@@ -242,6 +244,7 @@
           question: parsed.value,
           forceRoundOpen: localTestMode
         });
+        localQuestionCount = Math.max(localQuestionCount + 1, result.questionCount ?? 0);
         feedback = result.answerTextIs;
       }
 
