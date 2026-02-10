@@ -1,0 +1,22 @@
+name = "hverermadurinn"
+compatibility_date = "2026-02-10"
+compatibility_flags = ["nodejs_compat"]
+main = ".svelte-kit/cloudflare/_worker.js"
+
+[assets]
+binding = "ASSETS"
+directory = ".svelte-kit/cloudflare"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hverermadurinn"
+database_id = "cbefd3bc-9a41-41ac-a154-10b99436fc78"
+migrations_dir = "drizzle"
+
+[vars]
+ADMIN_TOKEN = "CHANGE_ME"
+LLM_PROVIDER = "gemini"
+LLM_MODEL = "gemini-2.5-flash-lite"
+LLM_BASE_URL = ""
+FORCE_ROUND_OPEN = "false"
+DEV_RANDOM_ROUND_PER_SESSION = "false"
