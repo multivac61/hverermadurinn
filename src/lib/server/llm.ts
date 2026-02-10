@@ -30,6 +30,17 @@ function extractJson(text: string) {
   }
 }
 
+function isGenderRefusal(text: string) {
+  const t = text.toLowerCase();
+  return (
+    t.includes('kyn') ||
+    t.includes('gender') ||
+    t.includes('he/she') ||
+    t.includes('get ekki gefið upp kyn') ||
+    t.includes('get ekki gefid upp kyn')
+  );
+}
+
 function buildPrompt(question: string, person: Person) {
   return [
     'You answer a guessing game question in Icelandic.',
@@ -135,12 +146,22 @@ export async function answerQuestionWithLlm(input: {
   try {
     if (provider === 'gemini') {
       const result = await askGemini(question, person, env);
-      if (result) return result;
+      if (result) {
+        if (!isGenderQuestion(question) && isGenderRefusal(result.answerTextIs)) {
+          return answerQuestionForPerson(question, person);
+        }
+        return result;
+      }
     }
 
     if (provider === 'openai' || provider === 'openai-compatible' || provider === 'kimi') {
       const result = await askOpenAiCompatible(question, person, env);
-      if (result) return result;
+      if (result) {
+        if (!isGenderQuestion(question) && isGenderRefusal(result.answerTextIs)) {
+          return answerQuestionForPerson(question, person);
+        }
+        return result;
+      }
     }
   } catch {
     // fallback below
