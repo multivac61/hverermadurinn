@@ -187,7 +187,7 @@
           guess: parsed.value,
           forceRoundOpen: localTestMode
         });
-        feedback = result.correct ? 'Rétt hjá þér! 🎉' : 'Ekki rétt — reyndu aftur.';
+        feedback = result.correct ? 'Rétt hjá þér! 🎉' : 'Nei.';
         if (result.revealPerson) revealedFromGuess = result.revealPerson;
       } else {
         if (remainingQuestions <= 0) throw new Error('Spurningamark náð. Notaðu gisk: Nafn');
