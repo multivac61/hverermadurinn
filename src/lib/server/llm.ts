@@ -1,5 +1,5 @@
 import type { Person } from '$lib/server/game';
-import { answerQuestionForPerson, isGenderQuestion } from '$lib/server/game';
+import { answerQuestionForPerson } from '$lib/server/game';
 
 type EnvLike = {
   LLM_API_KEY?: string;
@@ -30,23 +30,11 @@ function extractJson(text: string) {
   }
 }
 
-function isGenderRefusal(text: string) {
-  const t = text.toLowerCase();
-  return (
-    t.includes('kyn') ||
-    t.includes('gender') ||
-    t.includes('he/she') ||
-    t.includes('get ekki gefið upp kyn') ||
-    t.includes('get ekki gefid upp kyn')
-  );
-}
-
 function buildPrompt(question: string, person: Person) {
   return [
     'You answer a guessing game question in Icelandic.',
     'Do NOT reveal the person name.',
-    'Do NOT reveal, infer, or confirm the person gender under any circumstance.',
-    'If the user asks about gender, respond with answerLabel=unknown and a short refusal in Icelandic.',
+    'Gender questions are allowed. Answer them normally with yes/no/unknown.',
     'Return STRICT JSON: {"answerLabel":"yes|no|unknown|probably_yes|probably_no","answerTextIs":"short icelandic sentence"}.',
     'Keep answerTextIs very short (max 1 sentence).',
     `Target person name: ${person.displayName}`,
@@ -132,13 +120,6 @@ export async function answerQuestionWithLlm(input: {
 }) {
   const { question, person, env } = input;
 
-  if (isGenderQuestion(question)) {
-    return {
-      answerLabel: 'unknown' as const,
-      answerTextIs: 'Ég get ekki gefið upp kyn. Spurðu frekar um starf, tímabil eða afrek.'
-    };
-  }
-
   if (!env?.LLM_API_KEY) return answerQuestionForPerson(question, person);
 
   const provider = (env.LLM_PROVIDER || 'gemini').toLowerCase();
@@ -147,9 +128,6 @@ export async function answerQuestionWithLlm(input: {
     if (provider === 'gemini') {
       const result = await askGemini(question, person, env);
       if (result) {
-        if (!isGenderQuestion(question) && isGenderRefusal(result.answerTextIs)) {
-          return answerQuestionForPerson(question, person);
-        }
         return result;
       }
     }
@@ -157,9 +135,6 @@ export async function answerQuestionWithLlm(input: {
     if (provider === 'openai' || provider === 'openai-compatible' || provider === 'kimi') {
       const result = await askOpenAiCompatible(question, person, env);
       if (result) {
-        if (!isGenderQuestion(question) && isGenderRefusal(result.answerTextIs)) {
-          return answerQuestionForPerson(question, person);
-        }
         return result;
       }
     }

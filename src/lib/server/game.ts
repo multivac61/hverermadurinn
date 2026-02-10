@@ -190,10 +190,7 @@ export function answerQuestionForPerson(question: string, person: Person) {
   let answerLabel: AnswerLabel = 'unknown';
   let answerTextIs = 'Ég er ekki viss — geturðu spurt aðeins skýrar?';
 
-  if (isGenderQuestion(question)) {
-    answerLabel = 'unknown';
-    answerTextIs = 'Ég get ekki gefið upp kyn. Spurðu frekar um starf, tímabil eða afrek.';
-  } else if (mentionsName) {
+  if (mentionsName) {
     answerLabel = 'unknown';
     answerTextIs = 'Ég get ekki staðfest nafn beint. Prófaðu frekar eiginleika eða hlutverk.';
   } else if (person.yesKeywords.some((k) => q.includes(normalize(k)))) {
