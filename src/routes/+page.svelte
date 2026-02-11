@@ -178,11 +178,12 @@
 
   async function initializeSession(randomizeRound = false) {
     sessionReady = false;
-    const deviceId = randomizeRound ? `anon-${randomId()}` : getDeviceId();
-    currentDeviceId = deviceId;
+    const persistentDeviceId = getDeviceId();
+    const sessionDeviceId = randomizeRound ? `anon-${randomId()}` : persistentDeviceId;
+    currentDeviceId = persistentDeviceId;
 
     const result = await startSessionCommand({
-      deviceId,
+      deviceId: sessionDeviceId,
       randomizeRound,
       freshDevice: randomizeRound,
       forceRoundOpen: localTestMode
@@ -198,7 +199,7 @@
     usernameConfirmed = false;
     localQuestionCount = 0;
 
-    const usernameResult = await getUsernameQuery({ deviceId });
+    const usernameResult = await getUsernameQuery({ deviceId: persistentDeviceId });
     username = usernameResult.username ?? '';
     usernameInput = username;
     usernameError = '';
@@ -307,14 +308,62 @@
     showIntro = false;
   }
 
+  async function createShareImageBlob() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 630;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#111111';
+    ctx.font = '700 66px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText('Hver er maðurinn?', 70, 140);
+
+    ctx.font = '500 44px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(`I solved it in ${effectiveQuestionCount} guesses today.`, 70, 250);
+
+    ctx.font = '400 36px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    const revealLine = revealPerson?.displayName ? `Today\'s person: ${revealPerson.displayName}` : 'Try it yourself today';
+    ctx.fillText(revealLine, 70, 330);
+
+    ctx.fillStyle = '#27272a';
+    ctx.font = '600 40px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText('Try it at hverermadurinn.is', 70, 530);
+
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/png');
+    });
+  }
+
   async function shareResult() {
-    const text = `Ég leysti "Hver er maðurinn?" í ${questionCount} spurningum! #hverermadurinn`;
+    const url = 'https://hverermadurinn.is';
+    const text = `I solved Hver er maðurinn in ${effectiveQuestionCount} guesses today. Try it yourself at hverermadurinn.is`;
+
     try {
+      const imageBlob = await createShareImageBlob();
+
       if (navigator.share) {
-        await navigator.share({ text, url: window.location.origin });
+        if (imageBlob) {
+          const file = new File([imageBlob], 'hverermadurinn-result.png', { type: 'image/png' });
+          if (navigator.canShare?.({ files: [file] })) {
+            await navigator.share({
+              title: 'Hver er maðurinn?',
+              text,
+              url,
+              files: [file]
+            });
+            shareStatus = 'Deilt!';
+            return;
+          }
+        }
+
+        await navigator.share({ title: 'Hver er maðurinn?', text, url });
         shareStatus = 'Deilt!';
       } else {
-        await navigator.clipboard.writeText(`${text} ${window.location.origin}`);
+        await navigator.clipboard.writeText(`${text} ${url}`);
         shareStatus = 'Afritað í klippiborð';
       }
     } catch {
@@ -476,10 +525,10 @@
           {:else if viewStep === 'solved'}
             <p class="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 sm:mt-8 sm:text-sm">Svarið er</p>
             <h1 class="mt-2 text-4xl font-semibold leading-[1.08] sm:text-7xl">{revealPerson?.displayName ?? 'Leik lokið'}</h1>
-            <p class="mt-4 text-lg text-zinc-600">Þú leystir leik dagsins í {questionCount} spurningum.</p>
             {#if revealPerson?.revealTextIs}
-              <p class="mt-2 text-zinc-600">{revealPerson.revealTextIs}</p>
+              <p class="mt-4 text-zinc-600">{revealPerson.revealTextIs}</p>
             {/if}
+            <p class="mt-2 text-lg text-zinc-600">Þú leystir leik dagsins í {effectiveQuestionCount} spurningum.</p>
 
             {#if revealPerson?.imageUrl && !revealImageFailed}
               <div class="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
