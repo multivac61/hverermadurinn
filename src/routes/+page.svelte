@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { blur } from 'svelte/transition';
+  import { fade } from 'svelte/transition';
   import { onMount, tick } from 'svelte';
   import {
     getDebugRoundInfoQuery,
@@ -76,6 +76,8 @@
   const latestAnswerText = $derived(
     questions.length > 0 ? String(questions[questions.length - 1]?.answerTextIs ?? '') : ''
   );
+  const questionHeadingText = $derived(latestAnswerText || feedback || 'Hver er maðurinn?');
+  const questionHeadingWrap = $derived(questionHeadingText.length > 52);
   const remainingQuestions = $derived(round ? Math.max(0, round.maxQuestions - effectiveQuestionCount) : 0);
   const isOpenForPlay = $derived(Boolean(localTestMode || round?.status === 'open'));
   const pending = $derived(handleInputCommand.pending > 0);
@@ -133,6 +135,7 @@
       void focusStepInput(step);
     }
   });
+
 
   $effect(() => {
     const targetRoundId = sessionRoundId || round?.id || '';
@@ -482,15 +485,25 @@
   <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${displayProgressPct}%`}></div>
 </div>
 
-<main class="min-h-screen bg-zinc-50 px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
+<main class="relative min-h-screen bg-zinc-50 px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
+  {#if pending && viewStep === 'question'}
+    <div class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-zinc-50/50 backdrop-blur-[2px]">
+      <div class="rounded-full bg-white/90 p-4 shadow-sm ring-1 ring-zinc-200">
+        <svg class="h-8 w-8 animate-spin text-zinc-900" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Hleð">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="2.5" />
+          <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+        </svg>
+      </div>
+    </div>
+  {/if}
   <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-7xl items-center sm:min-h-[calc(100vh-4rem)]">
     <section class="w-full px-2 py-2 sm:px-12 lg:px-28">
       <div class="relative min-h-[68vh] w-full sm:min-h-[58vh]">
         {#key viewStep}
           <div
-            class="absolute inset-0 flex flex-col justify-center"
-            in:blur={{ duration: 360, amount: 16, opacity: 0.2 }}
-            out:blur={{ duration: 280, amount: 12, opacity: 0.14 }}
+            class="absolute inset-0 flex flex-col justify-start pt-16 pb-16 sm:pt-20 sm:pb-24"
+            in:fade={{ duration: 260 }}
+            out:fade={{ duration: 220 }}
           >
           {#if viewStep === 'loading'}
             <div class="mt-6 flex items-center justify-center">
@@ -530,7 +543,7 @@
               />
               <div class="mt-6 flex items-center gap-4">
                 <button
-                  class="w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40 sm:w-auto"
+                  class="inline-flex h-12 w-full min-w-[9rem] items-center justify-center whitespace-nowrap rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40 sm:w-auto"
                   disabled={setUsernameCommand.pending > 0}
                 >
                   {username ? 'Staðfesta' : 'Vista nafn'}
@@ -544,13 +557,19 @@
           {:else if viewStep === 'intro'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hver er maðurinn?</h1>
             <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">Þú hefur 20 spurningar.</p>
-            <button class="mt-8 w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white sm:mt-10 sm:w-auto" onclick={startGame}>
+            <button class="mt-8 inline-flex h-12 w-full min-w-[9rem] items-center justify-center whitespace-nowrap rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white sm:mt-10 sm:w-auto" onclick={startGame}>
               Byrja
             </button>
           {:else if viewStep === 'question'}
-            <h1 class="mt-4 min-h-[3.2rem] text-3xl font-semibold leading-[1.08] sm:mt-8 sm:min-h-[5rem] sm:text-6xl">
-              {latestAnswerText || feedback || 'Hver er maðurinn?'}
-            </h1>
+            <div
+              class={`mt-4 sm:mt-8 ${questionHeadingWrap ? 'min-h-[5.2rem] sm:min-h-[8.4rem]' : 'min-h-[2.8rem] sm:min-h-[4.8rem]'}`}
+            >
+              <h1
+                class={`font-semibold leading-[1.08] ${questionHeadingWrap ? 'text-2xl sm:text-5xl' : 'text-3xl sm:text-6xl'} ${questionHeadingWrap ? 'whitespace-normal' : 'whitespace-nowrap'}`}
+              >
+                {questionHeadingText}
+              </h1>
+            </div>
 
             <form class={`mt-8 transition-opacity duration-200 ${pending ? 'opacity-90' : 'opacity-100'}`} onsubmit={submitCurrent}>
               <input
@@ -562,10 +581,10 @@
 
               <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
                 <button
-                  class="w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40 sm:w-auto"
+                  class="inline-flex h-12 w-full min-w-[9rem] items-center justify-center whitespace-nowrap rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40 sm:w-auto"
                   disabled={!canSubmit}
                 >
-                  Áfram
+                  {pending ? 'Hugsa' : 'Áfram'}
                 </button>
                 <span class="text-xs text-zinc-500">ENTER ↵</span>
               </div>
@@ -603,10 +622,10 @@
             {/if}
 
             <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <button class="w-full rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white sm:w-auto" onclick={shareResult}>
+              <button class="inline-flex h-12 w-full min-w-[9rem] items-center justify-center whitespace-nowrap rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white sm:w-auto" onclick={shareResult}>
                 Deila niðurstöðu
               </button>
-              <button class="w-full rounded-xl border border-zinc-300 bg-white px-6 py-3 text-sm font-semibold text-zinc-900 sm:w-auto" onclick={showLeaderboardForDay}>
+              <button class="inline-flex h-12 w-full min-w-[9rem] items-center justify-center whitespace-nowrap rounded-xl border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-900 sm:w-auto" onclick={showLeaderboardForDay}>
                 Sjá stigatöflu dagsins
               </button>
               {#if shareStatus}
@@ -682,7 +701,7 @@
             {/if}
 
             <div class="mt-8">
-              <button class="rounded-xl border border-zinc-300 bg-white px-6 py-3 text-sm font-semibold text-zinc-900" onclick={backToSolved}>
+              <button class="inline-flex h-12 min-w-[9rem] items-center justify-center whitespace-nowrap rounded-xl border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-900" onclick={backToSolved}>
                 Til baka
               </button>
             </div>

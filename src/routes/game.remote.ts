@@ -177,13 +177,10 @@ export const handleInputCommand = command(singleInputBodySchema, async (input) =
   const lower = text.toLowerCase();
 
   const explicitHint = ['vísbending', 'visbending', 'hint', 'hjálp', 'hjalp'].includes(lower);
-  const explicitQuestion = text.includes('?');
 
   const intent = explicitHint
     ? { kind: 'hint' as const }
-    : explicitQuestion
-      ? { kind: 'question' as const }
-      : await classifyInputIntentWithLlm({ inputText: text, env });
+    : await classifyInputIntentWithLlm({ inputText: text, env });
 
   if (intent.kind === 'hint') {
     const result = db
