@@ -706,8 +706,7 @@
               </button>
             </div>
           {:else if viewStep === 'scheduled'}
-            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leikurinn opnar kl. 12:00</h1>
-            <p class="mt-4 text-zinc-600">Ný persóna kemur á hádegi.</p>
+            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leikurinn opnar á hádegi</h1>
           {:else}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leiknum er lokið í dag</h1>
             <p class="mt-4 text-zinc-600">Næsti leikur opnar á morgun.</p>
