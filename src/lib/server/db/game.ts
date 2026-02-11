@@ -189,6 +189,7 @@ async function resolvePersonForSession(db: Db, roundId: string) {
     imageUrl: personRow.imageUrl || fallback.imageUrl,
     aliases: aliases.length > 0 ? aliases : fallback.aliases,
     hintIs: roundRow.hintTextIs || fallback.hintIs,
+    isIcelander: fallback.isIcelander,
     yesKeywords: fallback.yesKeywords,
     noKeywords: fallback.noKeywords
   };

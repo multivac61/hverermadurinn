@@ -1,5 +1,4 @@
 import type { Person } from '$lib/server/game';
-import { answerQuestionForPerson } from '$lib/server/game';
 
 type EnvLike = {
   LLM_API_KEY?: string;
@@ -9,6 +8,11 @@ type EnvLike = {
 };
 
 type AnswerLabel = 'yes' | 'no' | 'unknown' | 'probably_yes' | 'probably_no';
+
+type LlmAnswer = {
+  answerLabel: AnswerLabel;
+  answerTextIs: string;
+};
 
 function normalizeLabel(value: string): AnswerLabel {
   const v = value.trim().toLowerCase();
@@ -30,16 +34,43 @@ function extractJson(text: string) {
   }
 }
 
+function shortAnswerFromLabel(label: AnswerLabel) {
+  if (label === 'yes') return 'Já.';
+  if (label === 'no') return 'Nei.';
+  if (label === 'probably_yes') return 'Líklega já.';
+  if (label === 'probably_no') return 'Líklega nei.';
+  return 'Ekki viss.';
+}
+
+function normalizeAnswerText(answerLabel: AnswerLabel, rawText: string) {
+  const cleaned = rawText.trim().replace(/\s+/g, ' ');
+  const firstSentence = cleaned.split(/[.!?]\s/)[0]?.trim() ?? '';
+  const candidate = firstSentence.length > 0 ? firstSentence : cleaned;
+
+  if (!candidate) return shortAnswerFromLabel(answerLabel);
+
+  const clipped = candidate.length > 90 ? `${candidate.slice(0, 89)}…` : candidate;
+  return /[.!?]$/.test(clipped) ? clipped : `${clipped}.`;
+}
+
+function logLlm(event: string, data: Record<string, unknown>) {
+  console.log(`[llm] ${event}`, JSON.stringify(data));
+}
+
 function buildSystemPrompt() {
   return [
-    'Role: You are the game master for "Hver er maðurinn?".',
+    'Role: You are the strict game master for "Hver er maðurinn?".',
     'Language: Always answer in Icelandic.',
-    'Task: Answer the user question about the hidden person with a short yes/no style response.',
-    'Never reveal or confirm the person name directly.',
-    'Gender questions are allowed; answer them normally.',
-    'If input is unclear, use unknown.',
+    'You must answer clearly and briefly (one short sentence).',
+    'Prefer direct labels: yes/no whenever possible; use unknown only when evidence is genuinely insufficient.',
+    'For factual binary questions (e.g. nationality/profession), avoid unknown unless the provided facts truly do not decide it.',
+    'Never reveal or confirm the exact person name directly.',
+    'Gender questions are allowed and should be answered normally.',
+    'Examples:',
+    '- Q: "Er manneskjan íslendingur?" -> {"answerLabel":"yes","answerTextIs":"Já."} or {"answerLabel":"no","answerTextIs":"Nei."}',
+    '- Q: "Er hún tónlistarkona?" -> short yes/no/unknown based on facts.',
     'Output STRICT JSON only: {"answerLabel":"yes|no|unknown|probably_yes|probably_no","answerTextIs":"short icelandic sentence"}.',
-    'Keep answerTextIs to one short sentence.'
+    'Do not output markdown or any text outside JSON.'
   ].join('\n');
 }
 
@@ -47,6 +78,7 @@ function buildUserPrompt(question: string, person: Person) {
   return [
     `Target person name: ${person.displayName}`,
     `Known aliases: ${person.aliases.join(', ')}`,
+    `Known nationality flag (is Icelandic): ${person.isIcelander ? 'yes' : 'no'}`,
     `Bio: ${person.revealTextIs}`,
     `Hint: ${person.hintIs}`,
     `Question: ${question}`
@@ -73,16 +105,25 @@ async function askGemini(question: string, person: Person, env: EnvLike) {
     })
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    logLlm('gemini_http_error', { status: response.status });
+    return null;
+  }
   const data = (await response.json()) as any;
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== 'string') return null;
+  if (typeof text !== 'string') {
+    logLlm('gemini_no_text', { hasCandidates: Boolean(data?.candidates?.length) });
+    return null;
+  }
 
   const parsed = extractJson(text);
-  if (!parsed) return null;
+  if (!parsed) {
+    logLlm('gemini_bad_json', { text: text.slice(0, 220) });
+    return null;
+  }
 
   const answerLabel = normalizeLabel(String(parsed.answerLabel ?? 'unknown'));
-  const answerTextIs = String(parsed.answerTextIs ?? '').trim() || 'Ég er ekki viss — geturðu spurt aðeins skýrar?';
+  const answerTextIs = normalizeAnswerText(answerLabel, String(parsed.answerTextIs ?? ''));
 
   return { answerLabel, answerTextIs };
 }
@@ -111,16 +152,25 @@ async function askOpenAiCompatible(question: string, person: Person, env: EnvLik
     })
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    logLlm('openai_http_error', { status: response.status });
+    return null;
+  }
   const data = (await response.json()) as any;
   const text = data?.choices?.[0]?.message?.content;
-  if (typeof text !== 'string') return null;
+  if (typeof text !== 'string') {
+    logLlm('openai_no_text', { hasChoices: Boolean(data?.choices?.length) });
+    return null;
+  }
 
   const parsed = extractJson(text);
-  if (!parsed) return null;
+  if (!parsed) {
+    logLlm('openai_bad_json', { text: text.slice(0, 220) });
+    return null;
+  }
 
   const answerLabel = normalizeLabel(String(parsed.answerLabel ?? 'unknown'));
-  const answerTextIs = String(parsed.answerTextIs ?? '').trim() || 'Ég er ekki viss — geturðu spurt aðeins skýrar?';
+  const answerTextIs = normalizeAnswerText(answerLabel, String(parsed.answerTextIs ?? ''));
 
   return { answerLabel, answerTextIs };
 }
@@ -131,8 +181,12 @@ export async function answerQuestionWithLlm(input: {
   env: EnvLike | undefined;
 }) {
   const { question, person, env } = input;
+  const fallback: LlmAnswer = { answerLabel: 'unknown', answerTextIs: 'Ekki viss.' };
 
-  if (!env?.LLM_API_KEY) return answerQuestionForPerson(question, person);
+  if (!env?.LLM_API_KEY) {
+    logLlm('fallback_no_api_key', { provider: env?.LLM_PROVIDER ?? 'none', question });
+    return fallback;
+  }
 
   const provider = (env.LLM_PROVIDER || 'gemini').toLowerCase();
 
@@ -140,6 +194,7 @@ export async function answerQuestionWithLlm(input: {
     if (provider === 'gemini') {
       const result = await askGemini(question, person, env);
       if (result) {
+        logLlm('answer', { provider, question, answerLabel: result.answerLabel, answerTextIs: result.answerTextIs });
         return result;
       }
     }
@@ -147,12 +202,18 @@ export async function answerQuestionWithLlm(input: {
     if (provider === 'openai' || provider === 'openai-compatible' || provider === 'kimi') {
       const result = await askOpenAiCompatible(question, person, env);
       if (result) {
+        logLlm('answer', { provider, question, answerLabel: result.answerLabel, answerTextIs: result.answerTextIs });
         return result;
       }
     }
-  } catch {
-    // fallback below
+  } catch (error) {
+    logLlm('provider_exception', {
+      provider,
+      question,
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 
-  return answerQuestionForPerson(question, person);
+  logLlm('fallback_unknown', { provider, question });
+  return fallback;
 }

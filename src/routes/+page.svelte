@@ -182,15 +182,6 @@
     const guessMatch = input.match(/^(gisk|giska|guess)\s*:\s*(.+)$/i);
     if (guessMatch) return { kind: 'guess' as const, value: guessMatch[2].trim() };
 
-    const likelyQuestionStart = /^(er|var|hvað|hver|hvenær|af hverju|is|was|what|who|when|why|does|did)\b/i.test(
-      input
-    );
-    const looksLikeName = /^[\p{L}.'’\-]+(?:\s+[\p{L}.'’\-]+){0,3}$/u.test(input);
-
-    if (!input.includes('?') && !likelyQuestionStart && looksLikeName) {
-      return { kind: 'guess' as const, value: input };
-    }
-
     return { kind: 'question' as const, value: input };
   }
 
@@ -428,13 +419,15 @@
               {latestAnswerText || feedback || 'Hver er maðurinn?'}
             </h1>
 
-            <form class="mt-8" onsubmit={submitCurrent}>
+            <form class={`mt-8 transition-opacity duration-200 ${pending ? 'opacity-90' : 'opacity-100'}`} onsubmit={submitCurrent}>
               <input
                 class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-2xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 sm:text-4xl"
                 bind:value={inputText}
                 placeholder="Skrifaðu svar..."
                 autofocus
               />
+
+              <p class="mt-2 text-xs text-zinc-500">Notaðu „gisk: Nafn“ til að giska, eða „vísbending“.</p>
 
               <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
                 <button
