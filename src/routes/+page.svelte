@@ -2,15 +2,13 @@
   import { blur } from 'svelte/transition';
   import { onMount } from 'svelte';
   import {
-    askQuestionCommand,
     getLeaderboardQuery,
     getRound,
     getSessionStateQuery,
     getUsernameQuery,
-    requestHintCommand,
+    handleInputCommand,
     setUsernameCommand,
-    startSessionCommand,
-    submitGuessCommand
+    startSessionCommand
   } from './game.remote';
   import { randomId } from '$lib/shared/id';
 
@@ -72,9 +70,7 @@
   );
   const remainingQuestions = $derived(round ? Math.max(0, round.maxQuestions - effectiveQuestionCount) : 0);
   const isOpenForPlay = $derived(Boolean(localTestMode || round?.status === 'open'));
-  const pending = $derived(
-    askQuestionCommand.pending + submitGuessCommand.pending + requestHintCommand.pending > 0
-  );
+  const pending = $derived(handleInputCommand.pending > 0);
   const progressPct = $derived(round ? Math.min(100, (effectiveQuestionCount / round.maxQuestions) * 100) : 0);
   const displayProgressPct = $derived.by(() => {
     if (!round) return 0;
@@ -172,33 +168,6 @@
     sessionReady = true;
   }
 
-  function parseSingleInput(raw: string) {
-    const input = raw.trim();
-    const lower = input.toLowerCase();
-
-    if (['vísbending', 'visbending', 'hint', 'hjálp', 'hjalp'].includes(lower)) {
-      return { kind: 'hint' as const, value: '' };
-    }
-
-    const guessMatch = input.match(/^(gisk|giska|guess)\s*:\s*(.+)$/i);
-    if (guessMatch) return { kind: 'guess' as const, value: guessMatch[2].trim() };
-
-    return { kind: 'question' as const, value: input };
-  }
-
-  function looksLikeDirectCorrectGuessAnswer(answerText: string) {
-    const normalized = answerText
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-
-    return (
-      normalized.includes('rett persona') ||
-      normalized.includes('thetta er rett') ||
-      normalized.includes('this is the right person')
-    );
-  }
-
   async function submitCurrent(event?: SubmitEvent) {
     event?.preventDefault();
     if (!sessionId || !inputText.trim() || !isOpenForPlay || solved) return;
@@ -206,45 +175,24 @@
     showIntro = false;
     error = '';
 
-    const parsed = parseSingleInput(inputText);
-
     try {
-      if (parsed.kind === 'hint') {
-        const result = await requestHintCommand({ sessionId, forceRoundOpen: localTestMode });
+      if (remainingQuestions <= 0) throw new Error('Spurningamark náð.');
+
+      const result = await handleInputCommand({
+        sessionId,
+        input: inputText,
+        forceRoundOpen: localTestMode
+      });
+
+      if (result.kind === 'hint') {
         hint = result.hint;
-        feedback = 'Vísbending móttekin.';
-      } else if (parsed.kind === 'guess') {
-        if (!parsed.value) throw new Error('Notaðu: gisk: Nafn Persónu');
-        const result = await submitGuessCommand({
-          sessionId,
-          guess: parsed.value,
-          forceRoundOpen: localTestMode
-        });
-        feedback = result.correct ? 'Rétt hjá þér! 🎉' : 'Nei.';
+        feedback = result.answerTextIs;
+      } else if (result.kind === 'guess') {
+        feedback = result.answerTextIs;
         if (result.revealPerson) revealedFromGuess = result.revealPerson;
       } else {
-        if (remainingQuestions <= 0) throw new Error('Spurningamark náð.');
-        const result = await askQuestionCommand({
-          sessionId,
-          question: parsed.value,
-          forceRoundOpen: localTestMode
-        });
         localQuestionCount = Math.max(localQuestionCount + 1, result.questionCount ?? 0);
         feedback = result.answerTextIs;
-
-        if (
-          result.answerLabel === 'yes' &&
-          looksLikeDirectCorrectGuessAnswer(result.answerTextIs) &&
-          parsed.value.trim().length > 0
-        ) {
-          const guessResult = await submitGuessCommand({
-            sessionId,
-            guess: parsed.value,
-            forceRoundOpen: localTestMode
-          });
-          if (guessResult.revealPerson) revealedFromGuess = guessResult.revealPerson;
-          feedback = guessResult.correct ? 'Rétt hjá þér! 🎉' : feedback;
-        }
       }
 
       hasSubmitted = true;

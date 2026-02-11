@@ -14,6 +14,8 @@ type LlmAnswer = {
   answerTextIs: string;
 };
 
+type InputIntent = 'question' | 'guess' | 'hint';
+
 
 function normalizeLabel(value: string): AnswerLabel {
   const v = value.trim().toLowerCase();
@@ -137,6 +139,25 @@ function buildUserPrompt(question: string, person: Person) {
   ].join('\n');
 }
 
+function buildIntentSystemPrompt() {
+  return [
+    'Role: classify one player input for the game "Hver er maðurinn?".',
+    'Language: Icelandic game context.',
+    'Return STRICT JSON only: {"kind":"question|guess|hint"}.',
+    'Use hint if player asks for hint/help.',
+    'Use guess if player attempts to name the person.',
+    'Otherwise use question.',
+    'No extra text outside JSON.'
+  ].join('\n');
+}
+
+function normalizeIntent(value: string): InputIntent {
+  const v = value.trim().toLowerCase();
+  if (v === 'hint') return 'hint';
+  if (v === 'guess') return 'guess';
+  return 'question';
+}
+
 async function askGemini(question: string, person: Person, env: EnvLike) {
   const key = env.LLM_API_KEY;
   if (!key) return null;
@@ -231,6 +252,118 @@ async function askOpenAiCompatible(question: string, person: Person, env: EnvLik
   return { answerLabel, answerTextIs };
 }
 
+async function classifyWithGemini(inputText: string, env: EnvLike) {
+  const key = env.LLM_API_KEY;
+  if (!key) return null;
+
+  const model = env.LLM_MODEL || 'gemini-2.5-flash-lite';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+
+  const response = await fetchWithOneRetry(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: buildIntentSystemPrompt() }] },
+      contents: [{ role: 'user', parts: [{ text: `Input: ${inputText}` }] }],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  if (!response.ok) {
+    logLlm('gemini_intent_http_error', { status: response.status });
+    return null;
+  }
+
+  const data = (await response.json()) as any;
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== 'string') return null;
+
+  const parsed = extractJson(text);
+  if (!parsed) return null;
+
+  return normalizeIntent(String(parsed.kind ?? 'question'));
+}
+
+async function classifyWithOpenAiCompatible(inputText: string, env: EnvLike) {
+  const key = env.LLM_API_KEY;
+  if (!key) return null;
+
+  const baseUrl = env.LLM_BASE_URL || 'https://api.openai.com/v1';
+  const model = env.LLM_MODEL || 'gpt-4o-mini';
+
+  const response = await fetchWithOneRetry(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${key}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: buildIntentSystemPrompt() },
+        { role: 'user', content: `Input: ${inputText}` }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    logLlm('openai_intent_http_error', { status: response.status });
+    return null;
+  }
+
+  const data = (await response.json()) as any;
+  const text = data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string') return null;
+
+  const parsed = extractJson(text);
+  if (!parsed) return null;
+
+  return normalizeIntent(String(parsed.kind ?? 'question'));
+}
+
+export async function classifyInputIntentWithLlm(input: {
+  inputText: string;
+  env: EnvLike | undefined;
+}): Promise<{ kind: InputIntent }> {
+  const raw = input.inputText.trim();
+  if (!raw) return { kind: 'question' };
+
+  const lower = raw.toLowerCase();
+  if (['vísbending', 'visbending', 'hint', 'hjálp', 'hjalp'].includes(lower)) {
+    return { kind: 'hint' };
+  }
+
+  if (!input.env?.LLM_API_KEY) {
+    return { kind: 'question' };
+  }
+
+  const provider = (input.env.LLM_PROVIDER || 'gemini').toLowerCase();
+
+  try {
+    if (provider === 'gemini') {
+      const kind = await classifyWithGemini(raw, input.env);
+      if (kind) return { kind };
+    }
+
+    if (provider === 'openai' || provider === 'openai-compatible' || provider === 'kimi') {
+      const kind = await classifyWithOpenAiCompatible(raw, input.env);
+      if (kind) return { kind };
+    }
+  } catch (error) {
+    logLlm('intent_exception', {
+      provider,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+
+  return { kind: 'question' };
+}
+
 export async function answerQuestionWithLlm(input: {
   question: string;
   person: Person;
@@ -250,16 +383,18 @@ export async function answerQuestionWithLlm(input: {
     if (provider === 'gemini') {
       const result = await askGemini(question, person, env);
       if (result) {
-        logLlm('answer', { provider, question, answerLabel: result.answerLabel, answerTextIs: result.answerTextIs });
-        return result;
+        const safe = enforceNoExtraSensitiveDisclosure(question, result);
+        logLlm('answer', { provider, question, answerLabel: safe.answerLabel, answerTextIs: safe.answerTextIs });
+        return safe;
       }
     }
 
     if (provider === 'openai' || provider === 'openai-compatible' || provider === 'kimi') {
       const result = await askOpenAiCompatible(question, person, env);
       if (result) {
-        logLlm('answer', { provider, question, answerLabel: result.answerLabel, answerTextIs: result.answerTextIs });
-        return result;
+        const safe = enforceNoExtraSensitiveDisclosure(question, result);
+        logLlm('answer', { provider, question, answerLabel: safe.answerLabel, answerTextIs: safe.answerTextIs });
+        return safe;
       }
     }
   } catch (error) {

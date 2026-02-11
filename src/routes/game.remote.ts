@@ -1,7 +1,7 @@
 import { command, getRequestEvent, query } from '$app/server';
 import { getDb } from '$lib/server/db/client';
 import { randomId } from '$lib/shared/id';
-import { answerQuestionWithLlm } from '$lib/server/llm';
+import { answerQuestionWithLlm, classifyInputIntentWithLlm } from '$lib/server/llm';
 import {
   askQuestionDb,
   getLeaderboardDb,
@@ -27,6 +27,7 @@ import {
   leaderboardQuerySchema,
   questionBodySchema,
   sessionStateQuerySchema,
+  singleInputBodySchema,
   startSessionBodySchema,
   usernameQuerySchema,
   usernameSetSchema
@@ -135,6 +136,61 @@ export const requestHintCommand = command(hintBodySchema, async (input) => {
   return db
     ? await useHintDb(db, input.sessionId, Date.now(), { forceRoundOpen: effectiveForceOpen })
     : useHint(input.sessionId, Date.now(), { forceOpen: effectiveForceOpen });
+});
+
+export const handleInputCommand = command(singleInputBodySchema, async (input) => {
+  const { db, env, forceRoundOpen } = getServices();
+  const effectiveForceOpen = forceRoundOpen || input.forceRoundOpen === true;
+  const text = input.input.trim();
+
+  const intent = await classifyInputIntentWithLlm({ inputText: text, env });
+
+  if (intent.kind === 'hint') {
+    const result = db
+      ? await useHintDb(db, input.sessionId, Date.now(), { forceRoundOpen: effectiveForceOpen })
+      : useHint(input.sessionId, Date.now(), { forceOpen: effectiveForceOpen });
+    return {
+      kind: 'hint' as const,
+      hint: result.hint,
+      answerTextIs: 'Vísbending móttekin.'
+    };
+  }
+
+  if (intent.kind === 'guess') {
+    const guessText = text.replace(/^(gisk|giska|guess)\s*:\s*/i, '').trim();
+    const result = db
+      ? await submitGuessDb(db, input.sessionId, guessText, Date.now(), {
+          forceRoundOpen: effectiveForceOpen
+        })
+      : submitGuess(input.sessionId, guessText, Date.now(), { forceOpen: effectiveForceOpen });
+
+    return {
+      kind: 'guess' as const,
+      correct: result.correct,
+      solved: result.solved,
+      revealPerson: result.revealPerson,
+      answerTextIs: result.correct ? 'Rétt hjá þér! 🎉' : 'Nei.'
+    };
+  }
+
+  const result = db
+    ? await askQuestionDb(
+        db,
+        input.sessionId,
+        text,
+        Date.now(),
+        async ({ question, person }) => answerQuestionWithLlm({ question, person, env }),
+        { forceRoundOpen: effectiveForceOpen }
+      )
+    : askQuestion(input.sessionId, text, Date.now(), { forceOpen: effectiveForceOpen });
+
+  return {
+    kind: 'question' as const,
+    answerLabel: result.answerLabel,
+    answerTextIs: result.answerTextIs,
+    questionCount: result.questionCount,
+    remaining: result.remaining
+  };
 });
 
 export const getUsernameQuery = query(usernameQuerySchema, async (input) => {
