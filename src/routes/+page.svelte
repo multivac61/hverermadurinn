@@ -50,8 +50,8 @@
   let sessionReady = $state(false);
   let localQuestionCount = $state(0);
   let showAdminConsole = $state(false);
-  let usernameInputEl: HTMLInputElement | null = null;
-  let questionInputEl: HTMLInputElement | null = null;
+  let usernameInputEl = $state<HTMLInputElement | null>(null);
+  let questionInputEl = $state<HTMLInputElement | null>(null);
   let focusTimer: ReturnType<typeof setTimeout> | null = null;
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
@@ -421,7 +421,7 @@
                 autocomplete="username"
                 autocapitalize="none"
                 spellcheck="false"
-                autofocus
+                bind:this={usernameInputEl}
               />
               <div class="mt-6 flex items-center gap-4">
                 <button
@@ -452,7 +452,7 @@
                 class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-2xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 sm:text-4xl"
                 bind:value={inputText}
                 placeholder="Skrifaðu svar..."
-                autofocus
+                bind:this={questionInputEl}
               />
 
               <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">

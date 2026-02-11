@@ -201,7 +201,7 @@ export const handleInputCommand = command(singleInputBodySchema, async (input) =
       correct: result.correct,
       solved: result.solved,
       revealPerson: result.revealPerson,
-      answerTextIs: result.correct ? 'Rétt hjá þér! 🎉' : 'Nei.'
+      answerTextIs: result.correct ? '' : 'Nei.'
     };
   }
 
