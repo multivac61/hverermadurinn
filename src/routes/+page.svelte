@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import { onMount } from 'svelte';
   import {
     askQuestionCommand,
@@ -180,36 +181,6 @@
 
     const guessMatch = input.match(/^(gisk|giska|guess)\s*:\s*(.+)$/i);
     if (guessMatch) return { kind: 'guess' as const, value: guessMatch[2].trim() };
-
-    const questionStarters = [
-      'er ',
-      'var ',
-      'hefur ',
-      'hefurðu ',
-      'hvað ',
-      'hver ',
-      'hvenær ',
-      'af hverju ',
-      'is ',
-      'was ',
-      'does ',
-      'do ',
-      'did ',
-      'can ',
-      'could ',
-      'would ',
-      'where ',
-      'when ',
-      'who ',
-      'what '
-    ];
-
-    const looksLikeQuestion = input.includes('?') || questionStarters.some((start) => lower.startsWith(start));
-    const looksLikeName = /^[\p{L}.'’\-]+(?:\s+[\p{L}.'’\-]+){0,2}$/u.test(input);
-
-    if (!looksLikeQuestion && looksLikeName) {
-      return { kind: 'guess' as const, value: input };
-    }
 
     return { kind: 'question' as const, value: input };
   }
@@ -394,10 +365,12 @@
   <div class="h-full bg-zinc-900 transition-all duration-500" style={`width:${displayProgressPct}%`}></div>
 </div>
 
-<main class="min-h-screen bg-white px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
-  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-6xl items-center sm:min-h-[calc(100vh-4rem)]">
-    <section class="w-full px-1 py-2 sm:px-10 lg:px-20">
+<main class="min-h-screen bg-zinc-50 px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
+  <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-7xl items-center sm:min-h-[calc(100vh-4rem)]">
+    <section class="w-full px-2 py-2 sm:px-12 lg:px-28">
       <div class="flex min-h-[68vh] w-full flex-col justify-center sm:min-h-[58vh]">
+        {#key viewStep}
+          <div in:fade={{ duration: 140 }} out:fade={{ duration: 120 }}>
           {#if viewStep === 'loading'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
           {:else if viewStep === 'username'}
@@ -416,6 +389,7 @@
                 autocomplete="username"
                 autocapitalize="none"
                 spellcheck="false"
+                autofocus
               />
               <div class="mt-6 flex items-center gap-4">
                 <button
@@ -437,9 +411,7 @@
               Byrja
             </button>
           {:else if viewStep === 'question'}
-            <h1
-              class={`mt-4 font-semibold leading-[1.08] sm:mt-8 ${latestAnswerText || feedback ? 'text-2xl sm:text-5xl' : 'text-4xl sm:text-7xl'}`}
-            >
+            <h1 class="mt-4 min-h-[3.2rem] text-3xl font-semibold leading-[1.08] sm:mt-8 sm:min-h-[5rem] sm:text-6xl">
               {latestAnswerText || feedback || 'Hver er maðurinn?'}
             </h1>
 
@@ -448,6 +420,7 @@
                 class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-2xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 sm:text-4xl"
                 bind:value={inputText}
                 placeholder="Skrifaðu svar..."
+                autofocus
               />
 
               <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
@@ -531,7 +504,9 @@
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leiknum er lokið í dag</h1>
             <p class="mt-4 text-zinc-600">Næsti leikur opnar á morgun.</p>
           {/if}
-        </div>
+          </div>
+        {/key}
+      </div>
     </section>
   </div>
 </main>
