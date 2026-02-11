@@ -46,6 +46,8 @@ function getServices() {
 export const getRound = query(async () => {
   const { forceRoundOpen, devRandomRoundPerSession } = getServices();
   const round = getCurrentRound(Date.now(), { forceOpen: forceRoundOpen });
+  const canExposeDebugPerson = forceRoundOpen || devRandomRoundPerSession;
+
   return {
     round: {
       id: round.id,
@@ -58,7 +60,9 @@ export const getRound = query(async () => {
     },
     debug: {
       forceRoundOpen,
-      devRandomRoundPerSession
+      devRandomRoundPerSession,
+      currentPersonId: canExposeDebugPerson ? round.person.id : null,
+      currentPersonName: canExposeDebugPerson ? round.person.displayName : null
     },
     revealPerson:
       round.status === 'closed'

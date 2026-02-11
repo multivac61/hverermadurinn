@@ -1,6 +1,6 @@
 <script lang="ts">
   import { blur } from 'svelte/transition';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     getLeaderboardQuery,
     getRound,
@@ -48,6 +48,9 @@
   let sessionReady = $state(false);
   let localQuestionCount = $state(0);
   let showAdminConsole = $state(false);
+  let usernameInputEl: HTMLInputElement | null = null;
+  let questionInputEl: HTMLInputElement | null = null;
+  let focusTimer: ReturnType<typeof setTimeout> | null = null;
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
@@ -61,6 +64,7 @@
   const leaderboard = $derived((leaderboardQuery.current?.leaderboard as any[]) ?? []);
   const myLeaderboardEntry = $derived(leaderboard.find((row) => row.sessionId === sessionId) ?? null);
   const sessionState = $derived(sessionStateQuery?.current ?? null);
+  const sessionRoundId = $derived(String(sessionState?.session?.roundId ?? ''));
   const questionCount = $derived(sessionState?.session?.questionCount ?? 0);
   const solved = $derived(sessionState?.session?.solved ?? false);
   const questions = $derived(sessionState?.questions ?? []);
@@ -87,6 +91,8 @@
   const debugRandomRoundEnabled = $derived(
     Boolean((roundQuery.current as any)?.debug?.devRandomRoundPerSession)
   );
+  const debugCurrentPersonName = $derived(String((roundQuery.current as any)?.debug?.currentPersonName ?? ''));
+  const debugCurrentPersonId = $derived(String((roundQuery.current as any)?.debug?.currentPersonId ?? ''));
   const showLocalTestControls = $derived(debugForceRoundOpen || debugRandomRoundEnabled);
 
   const viewStep = $derived.by(() => {
@@ -95,14 +101,40 @@
     if (!sessionReady) return 'loading';
     if (showIntro) return 'intro';
     if (!usernameConfirmed) return 'username';
+    if (solved && showEndLeaderboard) return 'leaderboard';
     if (solved) return 'solved';
     return 'question';
   });
 
+  async function focusStepInput(step: string) {
+    await tick();
+
+    if (focusTimer) clearTimeout(focusTimer);
+
+    focusTimer = setTimeout(() => {
+      const el = step === 'username' ? usernameInputEl : step === 'question' ? questionInputEl : null;
+      if (!el) return;
+
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+    }, 180);
+  }
+
   $effect(() => {
-    if (round?.id && round.id !== leaderboardRoundId) {
-      leaderboardRoundId = round.id;
-      leaderboardQuery = getLeaderboardQuery({ roundId: round.id });
+    const step = viewStep;
+    if (step === 'username' || step === 'question') {
+      void focusStepInput(step);
+    }
+  });
+
+  $effect(() => {
+    const targetRoundId = sessionRoundId || round?.id || '';
+    if (targetRoundId && targetRoundId !== leaderboardRoundId) {
+      leaderboardRoundId = targetRoundId;
+      leaderboardQuery = getLeaderboardQuery({ roundId: targetRoundId });
     }
   });
 
@@ -287,6 +319,10 @@
     await leaderboardQuery.refresh();
   }
 
+  function backToSolved() {
+    showEndLeaderboard = false;
+  }
+
   async function startRandomTestRound() {
     error = '';
     try {
@@ -340,6 +376,7 @@
     return () => {
       disposed = true;
       clearInterval(timer);
+      if (focusTimer) clearTimeout(focusTimer);
     };
   });
 </script>
@@ -355,8 +392,8 @@
         {#key viewStep}
           <div
             class="absolute inset-0 flex flex-col justify-center"
-            in:blur={{ duration: 280, amount: 10, opacity: 0.15 }}
-            out:blur={{ duration: 220, amount: 8, opacity: 0.1 }}
+            in:blur={{ duration: 360, amount: 16, opacity: 0.2 }}
+            out:blur={{ duration: 280, amount: 12, opacity: 0.14 }}
           >
           {#if viewStep === 'loading'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
@@ -463,27 +500,32 @@
                 <span class="text-sm text-zinc-600">{shareStatus}</span>
               {/if}
             </div>
+          {:else if viewStep === 'leaderboard'}
+            <p class="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 sm:mt-8 sm:text-sm">Stigatafla</p>
+            <h1 class="mt-2 text-4xl font-semibold leading-[1.08] sm:text-7xl">Stigatafla dagsins</h1>
 
-            {#if showEndLeaderboard}
-              <div class="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
-                {#if myLeaderboardEntry}
-                  <p class="text-sm font-semibold text-zinc-700">Þín staða í dag: #{myLeaderboardEntry.rank}</p>
-                {/if}
-                <h2 class="mt-2 text-base font-semibold">Leaderboard</h2>
-                {#if leaderboard.length === 0}
-                  <p class="mt-2 text-sm text-zinc-600">Enginn búinn að leysa ennþá.</p>
-                {:else}
-                  <ul class="mt-2 space-y-2 text-sm">
-                    {#each leaderboard as row}
-                      <li class="flex items-center justify-between rounded-lg bg-white px-3 py-2">
-                        <span>#{row.rank} {row.username ? `@${row.username}` : ''}</span>
-                        <span>{row.questionsUsed}</span>
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
-              </div>
+            {#if myLeaderboardEntry}
+              <p class="mt-4 text-base font-semibold text-zinc-700">Þín staða í dag: #{myLeaderboardEntry.rank}</p>
             {/if}
+
+            {#if leaderboard.length === 0}
+              <p class="mt-4 text-zinc-600">Enginn búinn að leysa ennþá.</p>
+            {:else}
+              <ul class="mt-5 space-y-2 text-sm sm:text-base">
+                {#each leaderboard as row}
+                  <li class="flex items-center justify-between rounded-lg bg-white px-4 py-3 ring-1 ring-zinc-200">
+                    <span>#{row.rank} {row.username ? `@${row.username}` : ''}</span>
+                    <span>{row.questionsUsed}</span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+
+            <div class="mt-8">
+              <button class="rounded-xl border border-zinc-300 bg-white px-6 py-3 text-sm font-semibold text-zinc-900" onclick={backToSolved}>
+                Til baka
+              </button>
+            </div>
           {:else if viewStep === 'scheduled'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Leikurinn opnar kl. 12:00</h1>
             <p class="mt-4 text-zinc-600">Ný persóna kemur á hádegi.</p>
@@ -509,7 +551,14 @@
       </button>
 
       {#if showAdminConsole}
-        <div class="mt-2 w-64 space-y-2 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg">
+        <div class="mt-2 w-72 space-y-2 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg">
+          <div class="rounded-md bg-zinc-50 px-3 py-2 text-[11px] text-zinc-700">
+            <p><strong>Round:</strong> {round?.id ?? '—'}</p>
+            <p><strong>Persona:</strong> {debugCurrentPersonName || 'Falinn (ekki debug)'}</p>
+            {#if debugCurrentPersonId}
+              <p class="text-zinc-500">{debugCurrentPersonId}</p>
+            {/if}
+          </div>
           <a class="block rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-800" href="/admin">
             Opna /admin
           </a>
