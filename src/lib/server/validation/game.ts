@@ -42,6 +42,10 @@ export const leaderboardQuerySchema = v.object({
   roundId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))
 });
 
+export const debugRoundInfoQuerySchema = v.object({
+  roundId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40))
+});
+
 const usernameRegex = /^[a-zA-Z0-9_\-]{3,24}$/;
 
 export const usernameQuerySchema = v.object({

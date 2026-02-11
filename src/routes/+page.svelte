@@ -2,6 +2,7 @@
   import { blur } from 'svelte/transition';
   import { onMount, tick } from 'svelte';
   import {
+    getDebugRoundInfoQuery,
     getLeaderboardQuery,
     getRound,
     getSessionStateQuery,
@@ -32,6 +33,7 @@
   let roundQuery = $state(getRound());
   let leaderboardQuery = $state(getLeaderboardQuery({}));
   let sessionStateQuery = $state<ReturnType<typeof getSessionStateQuery> | null>(null);
+  let debugRoundInfoQuery = $state<ReturnType<typeof getDebugRoundInfoQuery> | null>(null);
   let revealedFromGuess = $state<RevealPerson | null>(null);
   let leaderboardRoundId = $state('');
   let localTestMode = $state(false);
@@ -91,8 +93,8 @@
   const debugRandomRoundEnabled = $derived(
     Boolean((roundQuery.current as any)?.debug?.devRandomRoundPerSession)
   );
-  const debugCurrentPersonName = $derived(String((roundQuery.current as any)?.debug?.currentPersonName ?? ''));
-  const debugCurrentPersonId = $derived(String((roundQuery.current as any)?.debug?.currentPersonId ?? ''));
+  const debugCurrentPersonName = $derived(String(debugRoundInfoQuery?.current?.personName ?? ''));
+  const debugCurrentPersonId = $derived(String(debugRoundInfoQuery?.current?.personId ?? ''));
   const showLocalTestControls = $derived(debugForceRoundOpen || debugRandomRoundEnabled);
 
   const viewStep = $derived.by(() => {
@@ -135,6 +137,12 @@
     if (targetRoundId && targetRoundId !== leaderboardRoundId) {
       leaderboardRoundId = targetRoundId;
       leaderboardQuery = getLeaderboardQuery({ roundId: targetRoundId });
+    }
+  });
+
+  $effect(() => {
+    if (showLocalTestControls && sessionRoundId) {
+      debugRoundInfoQuery = getDebugRoundInfoQuery({ roundId: sessionRoundId });
     }
   });
 

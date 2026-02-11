@@ -1,4 +1,5 @@
 import { command, getRequestEvent, query } from '$app/server';
+import { eq } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { randomId } from '$lib/shared/id';
 import { answerQuestionWithLlm, classifyInputIntentWithLlm } from '$lib/server/llm';
@@ -11,10 +12,12 @@ import {
   useHintDb
 } from '$lib/server/db/game';
 import { getUsernameByDeviceId, setUsernameForDeviceId } from '$lib/server/db/profile';
+import { persons, rounds } from '$lib/server/db/schema';
 import {
   askQuestion,
   getCurrentRound,
   getLeaderboard,
+  getPersonForRoundId,
   getSessionState,
   randomRoundId,
   startSession,
@@ -22,6 +25,7 @@ import {
   useHint
 } from '$lib/server/game';
 import {
+  debugRoundInfoQuerySchema,
   guessBodySchema,
   hintBodySchema,
   leaderboardQuerySchema,
@@ -73,6 +77,30 @@ export const getRound = query(async () => {
           }
         : null
   };
+});
+
+export const getDebugRoundInfoQuery = query(debugRoundInfoQuerySchema, async (input) => {
+  const { db, forceRoundOpen, devRandomRoundPerSession } = getServices();
+  const debugAllowed = forceRoundOpen || devRandomRoundPerSession;
+
+  if (!debugAllowed) {
+    return { roundId: input.roundId, personId: null, personName: null };
+  }
+
+  if (db) {
+    const [roundRow] = await db.select().from(rounds).where(eq(rounds.id, input.roundId)).limit(1);
+    if (roundRow) {
+      const [personRow] = await db.select().from(persons).where(eq(persons.id, roundRow.personId)).limit(1);
+      return {
+        roundId: input.roundId,
+        personId: roundRow.personId,
+        personName: personRow?.displayName ?? null
+      };
+    }
+  }
+
+  const fallback = getPersonForRoundId(input.roundId);
+  return { roundId: input.roundId, personId: fallback.id, personName: fallback.displayName };
 });
 
 export const startSessionCommand = command(startSessionBodySchema, async (input) => {
