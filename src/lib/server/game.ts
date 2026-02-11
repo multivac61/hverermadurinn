@@ -10,6 +10,7 @@ export type Person = {
   imageUrl: string;
   aliases: string[];
   hintIs: string;
+  isIcelander: boolean;
   yesKeywords: string[];
   noKeywords: string[];
 };
@@ -44,6 +45,7 @@ export const PERSONS: Person[] = [
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/84/Egilssaga17.jpg',
     aliases: ['egill', 'egill skallagrimsson', 'skallagrimsson'],
     hintIs: 'Persónan tengist fornsögum Íslands og er þekkt fyrir ljóð.',
+    isIcelander: true,
     yesKeywords: ['saga', 'forn', 'skáld', 'karl', 'islendingasaga', 'miðaldir'],
     noKeywords: ['kona', 'tónlist', 'fótbolti', 'leikari']
   },
@@ -54,6 +56,7 @@ export const PERSONS: Person[] = [
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/7/74/Bj%C3%B6rk_at_S%C3%B3leyjargata.jpg',
     aliases: ['bjork', 'björk', 'bjork gudmundsdottir', 'björk guðmundsdóttir'],
     hintIs: 'Persónan er þekkt fyrir mjög sérstakan söngstíl.',
+    isIcelander: true,
     yesKeywords: ['kona', 'söng', 'tónlist', 'list', 'pop', 'album'],
     noKeywords: ['fótbolti', 'forseti', 'vísind']
   },
@@ -64,6 +67,7 @@ export const PERSONS: Person[] = [
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f6/Vigdis_Finnbogadottir_1985.jpg',
     aliases: ['vigdis', 'vigdís', 'vigdís finnbogadóttir', 'vigdis finnbogadottir'],
     hintIs: 'Persónan tengist embætti þjóðhöfðingja.',
+    isIcelander: true,
     yesKeywords: ['kona', 'forseti', 'stjórnmál', 'island', 'embætti'],
     noKeywords: ['fótbolti', 'rap', 'leikari']
   }
@@ -386,6 +390,11 @@ export function submitGuess(
   if (!options.forceOpen && session.roundId !== round.id) throw new Error('SESSION_ROUND_MISMATCH');
   if (round.status !== 'open' && !session.solved) throw new Error('ROUND_NOT_OPEN');
 
+  if (!session.solved) {
+    if (session.questionCount >= MAX_QUESTIONS) throw new Error('QUESTION_LIMIT_REACHED');
+    session.questionCount += 1;
+  }
+
   const correct = isCorrectGuess(guess, round.person);
 
   if (correct && !session.solved) {
@@ -398,6 +407,8 @@ export function submitGuess(
   return {
     correct,
     solved: session.solved,
+    questionCount: session.questionCount,
+    remaining: Math.max(0, MAX_QUESTIONS - session.questionCount),
     reveal,
     revealPerson: reveal
       ? {

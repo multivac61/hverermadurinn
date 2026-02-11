@@ -287,19 +287,28 @@ export async function submitGuessDb(
   if (currentRound.status !== 'open' && !session.solved) throw new Error('ROUND_NOT_OPEN');
 
   const person = await resolvePersonForSession(db, session.roundId);
-  const correct = isCorrectGuess(guess, person);
 
   let solved = session.solved;
   let solvedAtMs = session.solvedAt?.getTime() ?? null;
+  let nextCount = session.questionCount;
 
-  if (correct && !solved) {
-    solved = true;
-    solvedAtMs = now;
-    await db
-      .update(deviceSessions)
-      .set({ solved: true, solvedAt: new Date(now) })
-      .where(eq(deviceSessions.id, sessionId))
-      .run();
+  if (!session.solved) {
+    if (session.questionCount >= MAX_QUESTIONS) throw new Error('QUESTION_LIMIT_REACHED');
+    nextCount = session.questionCount + 1;
+  }
+
+  const correct = isCorrectGuess(guess, person);
+
+  if (!session.solved) {
+    const setValues: any = { questionCount: nextCount };
+    if (correct) {
+      solved = true;
+      solvedAtMs = now;
+      setValues.solved = true;
+      setValues.solvedAt = new Date(now);
+    }
+
+    await db.update(deviceSessions).set(setValues).where(eq(deviceSessions.id, sessionId)).run();
   }
 
   await db
@@ -319,6 +328,8 @@ export async function submitGuessDb(
   return {
     correct,
     solved,
+    questionCount: nextCount,
+    remaining: Math.max(0, MAX_QUESTIONS - nextCount),
     reveal,
     revealPerson: reveal
       ? {
