@@ -493,7 +493,23 @@
             out:blur={{ duration: 280, amount: 12, opacity: 0.14 }}
           >
           {#if viewStep === 'loading'}
-            <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
+            <div class="mt-6 flex items-center justify-center">
+              <svg
+                class="h-14 w-14 animate-spin text-zinc-900"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-label="Hleð"
+              >
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.2" stroke-width="2.5" />
+                <path
+                  d="M21 12a9 9 0 0 0-9-9"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </div>
           {:else if viewStep === 'username'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hvað á ég að kalla þig?</h1>
             <p class="mt-4 text-xl text-zinc-600 sm:text-2xl">
