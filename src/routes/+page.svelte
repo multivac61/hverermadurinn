@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fade } from 'svelte/transition';
+  import { blur } from 'svelte/transition';
   import { onMount } from 'svelte';
   import {
     askQuestionCommand,
@@ -181,6 +181,15 @@
 
     const guessMatch = input.match(/^(gisk|giska|guess)\s*:\s*(.+)$/i);
     if (guessMatch) return { kind: 'guess' as const, value: guessMatch[2].trim() };
+
+    const likelyQuestionStart = /^(er|var|hvað|hver|hvenær|af hverju|is|was|what|who|when|why|does|did)\b/i.test(
+      input
+    );
+    const looksLikeName = /^[\p{L}.'’\-]+(?:\s+[\p{L}.'’\-]+){0,3}$/u.test(input);
+
+    if (!input.includes('?') && !likelyQuestionStart && looksLikeName) {
+      return { kind: 'guess' as const, value: input };
+    }
 
     return { kind: 'question' as const, value: input };
   }
@@ -370,7 +379,11 @@
     <section class="w-full px-2 py-2 sm:px-12 lg:px-28">
       <div class="relative min-h-[68vh] w-full sm:min-h-[58vh]">
         {#key viewStep}
-          <div class="absolute inset-0 flex flex-col justify-center" in:fade={{ duration: 180 }} out:fade={{ duration: 150 }}>
+          <div
+            class="absolute inset-0 flex flex-col justify-center"
+            in:blur={{ duration: 280, amount: 10, opacity: 0.15 }}
+            out:blur={{ duration: 220, amount: 8, opacity: 0.1 }}
+          >
           {#if viewStep === 'loading'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
           {:else if viewStep === 'username'}
