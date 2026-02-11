@@ -45,6 +45,8 @@
   let hasSubmitted = $state(false);
   let showIntro = $state(true);
   let shareStatus = $state('');
+  let sharePreviewUrl = $state('');
+  let sharePreviewError = $state('');
   let showEndLeaderboard = $state(false);
   let usernameConfirmed = $state(false);
   let sessionReady = $state(false);
@@ -150,6 +152,12 @@
     const imageUrl = revealPerson?.imageUrl;
     revealImageFailed = false;
     void imageUrl;
+  });
+
+  $effect(() => {
+    if (viewStep === 'solved') {
+      void updateSharePreview();
+    }
   });
 
   function getDeviceId() {
@@ -323,27 +331,58 @@
     ctx.fillText('Hver er maðurinn?', 70, 140);
 
     ctx.font = '500 44px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.fillText(`I solved it in ${effectiveQuestionCount} guesses today.`, 70, 250);
+    ctx.fillText(`Ég leysti leik dagsins í ${effectiveQuestionCount} giskum.`, 70, 250);
 
     ctx.font = '400 36px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    const revealLine = revealPerson?.displayName ? `Today\'s person: ${revealPerson.displayName}` : 'Try it yourself today';
-    ctx.fillText(revealLine, 70, 330);
+    ctx.fillText('Getur þú giskað á persónu dagsins?', 70, 330);
 
     ctx.fillStyle = '#27272a';
     ctx.font = '600 40px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.fillText('Try it at hverermadurinn.is', 70, 530);
+    ctx.fillText('Prófaðu á hverermadurinn.is', 70, 530);
 
     return new Promise<Blob | null>((resolve) => {
       canvas.toBlob((blob) => resolve(blob), 'image/png');
     });
   }
 
+  async function updateSharePreview(blob?: Blob | null) {
+    sharePreviewError = '';
+
+    try {
+      const imageBlob = blob ?? (await createShareImageBlob());
+      if (!imageBlob) throw new Error('NO_BLOB');
+
+      if (sharePreviewUrl) URL.revokeObjectURL(sharePreviewUrl);
+      sharePreviewUrl = URL.createObjectURL(imageBlob);
+    } catch {
+      sharePreviewError = 'Ekki tókst að búa til deilimynd.';
+    }
+  }
+
+  function getSharePayload() {
+    const g = Math.max(1, effectiveQuestionCount);
+    const url = `https://hverermadurinn.is/?g=${g}`;
+    const text = `Ég leysti Hver er maðurinn? í ${effectiveQuestionCount} giskum í dag. Prófaðu sjálf(ur) á hverermadurinn.is`;
+    return { url, text };
+  }
+
+  function getSocialShareLink(platform: 'facebook' | 'x' | 'linkedin' | 'whatsapp') {
+    const { url, text } = getSharePayload();
+    const u = encodeURIComponent(url);
+    const t = encodeURIComponent(text);
+
+    if (platform === 'facebook') return `https://www.facebook.com/sharer/sharer.php?u=${u}&quote=${t}`;
+    if (platform === 'x') return `https://twitter.com/intent/tweet?text=${t}&url=${u}`;
+    if (platform === 'linkedin') return `https://www.linkedin.com/sharing/share-offsite/?url=${u}`;
+    return `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`;
+  }
+
   async function shareResult() {
-    const url = 'https://hverermadurinn.is';
-    const text = `I solved Hver er maðurinn in ${effectiveQuestionCount} guesses today. Try it yourself at hverermadurinn.is`;
+    const { url, text } = getSharePayload();
 
     try {
       const imageBlob = await createShareImageBlob();
+      await updateSharePreview(imageBlob);
 
       if (navigator.share) {
         if (imageBlob) {
@@ -434,6 +473,7 @@
       disposed = true;
       clearInterval(timer);
       if (focusTimer) clearTimeout(focusTimer);
+      if (sharePreviewUrl) URL.revokeObjectURL(sharePreviewUrl);
     };
   });
 </script>
@@ -557,6 +597,53 @@
                 <span class="text-sm text-zinc-600">{shareStatus}</span>
               {/if}
             </div>
+
+            {#if sharePreviewUrl}
+              <div class="mt-6 rounded-2xl border border-zinc-200 bg-white p-3">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Deilimynd</p>
+                <button class="block w-full" onclick={shareResult}>
+                  <img class="w-full rounded-xl" src={sharePreviewUrl} alt="Deilimynd fyrir niðurstöðu" />
+                </button>
+                <p class="mt-2 text-xs text-zinc-500">Smelltu á myndina til að opna deilingu.</p>
+
+                <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <a
+                    class="rounded-lg border border-zinc-300 px-3 py-2 text-center text-xs font-semibold text-zinc-700"
+                    href={getSocialShareLink('facebook')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Facebook
+                  </a>
+                  <a
+                    class="rounded-lg border border-zinc-300 px-3 py-2 text-center text-xs font-semibold text-zinc-700"
+                    href={getSocialShareLink('x')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    X / Twitter
+                  </a>
+                  <a
+                    class="rounded-lg border border-zinc-300 px-3 py-2 text-center text-xs font-semibold text-zinc-700"
+                    href={getSocialShareLink('linkedin')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    LinkedIn
+                  </a>
+                  <a
+                    class="rounded-lg border border-zinc-300 px-3 py-2 text-center text-xs font-semibold text-zinc-700"
+                    href={getSocialShareLink('whatsapp')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    WhatsApp
+                  </a>
+                </div>
+              </div>
+            {:else if sharePreviewError}
+              <p class="mt-4 text-sm text-zinc-600">{sharePreviewError}</p>
+            {/if}
           {:else if viewStep === 'leaderboard'}
             <p class="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 sm:mt-8 sm:text-sm">Stigatafla</p>
             <h1 class="mt-2 text-4xl font-semibold leading-[1.08] sm:text-7xl">Stigatafla dagsins</h1>
