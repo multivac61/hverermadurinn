@@ -368,9 +368,9 @@
 <main class="min-h-screen bg-zinc-50 px-4 py-4 text-zinc-900 sm:px-8 sm:py-8">
   <div class="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-7xl items-center sm:min-h-[calc(100vh-4rem)]">
     <section class="w-full px-2 py-2 sm:px-12 lg:px-28">
-      <div class="flex min-h-[68vh] w-full flex-col justify-center sm:min-h-[58vh]">
+      <div class="relative min-h-[68vh] w-full sm:min-h-[58vh]">
         {#key viewStep}
-          <div in:fade={{ duration: 140 }} out:fade={{ duration: 120 }}>
+          <div class="absolute inset-0 flex flex-col justify-center" in:fade={{ duration: 180 }} out:fade={{ duration: 150 }}>
           {#if viewStep === 'loading'}
             <h1 class="mt-4 text-3xl font-semibold leading-[1.08] sm:mt-8 sm:text-6xl">Hleð stöðu leiks...</h1>
           {:else if viewStep === 'username'}
