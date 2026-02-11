@@ -49,6 +49,7 @@
   let usernameConfirmed = $state(false);
   let sessionReady = $state(false);
   let localQuestionCount = $state(0);
+  let showAdminConsole = $state(false);
 
   const DEVICE_KEY = 'hverermadurinn:deviceId';
   const LOCAL_TEST_MODE_KEY = 'hverermadurinn:local-test-mode';
@@ -185,6 +186,19 @@
     return { kind: 'question' as const, value: input };
   }
 
+  function looksLikeDirectCorrectGuessAnswer(answerText: string) {
+    const normalized = answerText
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    return (
+      normalized.includes('rett persona') ||
+      normalized.includes('thetta er rett') ||
+      normalized.includes('this is the right person')
+    );
+  }
+
   async function submitCurrent(event?: SubmitEvent) {
     event?.preventDefault();
     if (!sessionId || !inputText.trim() || !isOpenForPlay || solved) return;
@@ -209,7 +223,7 @@
         feedback = result.correct ? 'Rétt hjá þér! 🎉' : 'Nei.';
         if (result.revealPerson) revealedFromGuess = result.revealPerson;
       } else {
-        if (remainingQuestions <= 0) throw new Error('Spurningamark náð. Notaðu gisk: Nafn');
+        if (remainingQuestions <= 0) throw new Error('Spurningamark náð.');
         const result = await askQuestionCommand({
           sessionId,
           question: parsed.value,
@@ -217,6 +231,20 @@
         });
         localQuestionCount = Math.max(localQuestionCount + 1, result.questionCount ?? 0);
         feedback = result.answerTextIs;
+
+        if (
+          result.answerLabel === 'yes' &&
+          looksLikeDirectCorrectGuessAnswer(result.answerTextIs) &&
+          parsed.value.trim().length > 0
+        ) {
+          const guessResult = await submitGuessCommand({
+            sessionId,
+            guess: parsed.value,
+            forceRoundOpen: localTestMode
+          });
+          if (guessResult.revealPerson) revealedFromGuess = guessResult.revealPerson;
+          feedback = guessResult.correct ? 'Rétt hjá þér! 🎉' : feedback;
+        }
       }
 
       hasSubmitted = true;
@@ -520,4 +548,37 @@
       </div>
     </section>
   </div>
+
+  {#if showLocalTestControls}
+    <div class="fixed bottom-4 right-4 z-50">
+      <button
+        class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm"
+        onclick={() => {
+          showAdminConsole = !showAdminConsole;
+        }}
+      >
+        {showAdminConsole ? 'Fela admin' : 'Admin console'}
+      </button>
+
+      {#if showAdminConsole}
+        <div class="mt-2 w-64 space-y-2 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg">
+          <a class="block rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-800" href="/admin">
+            Opna /admin
+          </a>
+          <button
+            class="w-full rounded-md bg-zinc-900 px-3 py-2 text-xs font-semibold text-white"
+            onclick={toggleLocalTestMode}
+          >
+            {localTestMode ? 'Slökkva local test mode' : 'Kveikja local test mode'}
+          </button>
+          <button
+            class="w-full rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-800"
+            onclick={startRandomTestRound}
+          >
+            Ný random prófunarlota
+          </button>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </main>

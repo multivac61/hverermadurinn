@@ -14,7 +14,6 @@ type LlmAnswer = {
   answerTextIs: string;
 };
 
-type InputIntent = 'question' | 'guess' | 'hint';
 
 function normalizeLabel(value: string): AnswerLabel {
   const v = value.trim().toLowerCase();
@@ -55,6 +54,50 @@ function normalizeAnswerText(answerLabel: AnswerLabel, rawText: string) {
   return /[.!?]$/.test(clipped) ? clipped : `${clipped}.`;
 }
 
+function normalizeText(input: string) {
+  return input
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function asksAboutGender(question: string) {
+  const q = normalizeText(question);
+  return /\b(kyn|karl|kona|kk|kvk|male|female|he|she|hann|hun|hun)\b/.test(q);
+}
+
+function asksAboutLifeStatus(question: string) {
+  const q = normalizeText(question);
+  return /\b(lifandi|latinn|latin|daudur|daud|deceased|alive|dead)\b/.test(q);
+}
+
+function mentionsGender(answerText: string) {
+  const a = normalizeText(answerText);
+  return /\b(karl|kona|karlkyn|kvenkyn|male|female|he|she|hann|hun|hun)\b/.test(a);
+}
+
+function mentionsLifeStatus(answerText: string) {
+  const a = normalizeText(answerText);
+  return /\b(lifandi|latinn|latin|daudur|daud|deceased|alive|dead)\b/.test(a);
+}
+
+function enforceNoExtraSensitiveDisclosure(question: string, answer: LlmAnswer): LlmAnswer {
+  const qGender = asksAboutGender(question);
+  const qLife = asksAboutLifeStatus(question);
+
+  if (!qGender && mentionsGender(answer.answerTextIs)) {
+    return { ...answer, answerTextIs: shortAnswerFromLabel(answer.answerLabel) };
+  }
+
+  if (!qLife && mentionsLifeStatus(answer.answerTextIs)) {
+    return { ...answer, answerTextIs: shortAnswerFromLabel(answer.answerLabel) };
+  }
+
+  return answer;
+}
+
 function logLlm(event: string, data: Record<string, unknown>) {
   console.log(`[llm] ${event}`, JSON.stringify(data));
 }
@@ -92,23 +135,6 @@ function buildUserPrompt(question: string, person: Person) {
     `Hint: ${person.hintIs}`,
     `Question: ${question}`
   ].join('\n');
-}
-
-function buildIntentSystemPrompt() {
-  return [
-    'Role: classify a single Icelandic player input for a guessing game.',
-    'Return STRICT JSON only: {"kind":"question|guess|hint"}.',
-    'Use hint only when user asks for a hint/help.',
-    'Use guess when user is attempting to name the hidden person.',
-    'Otherwise use question.'
-  ].join('\n');
-}
-
-function normalizeIntent(value: string): InputIntent {
-  const v = value.trim().toLowerCase();
-  if (v === 'hint') return 'hint';
-  if (v === 'guess') return 'guess';
-  return 'question';
 }
 
 async function askGemini(question: string, person: Person, env: EnvLike) {
