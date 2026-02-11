@@ -225,7 +225,14 @@
       await leaderboardQuery.refresh();
       await roundQuery.refresh();
     } catch (e) {
-      error = (e as Error).message;
+      const message = (e as Error).message;
+      if (message === 'LLM_RATE_LIMITED') {
+        error = 'Kerfið er upptekið núna (hátt álag). Reyndu aftur eftir smástund.';
+      } else if (message === 'LLM_UPSTREAM_ERROR') {
+        error = 'Villa hjá svarþjónustu. Reyndu aftur.';
+      } else {
+        error = message;
+      }
     }
   }
 
@@ -426,8 +433,6 @@
                 placeholder="Skrifaðu svar..."
                 autofocus
               />
-
-              <p class="mt-2 text-xs text-zinc-500">Notaðu „gisk: Nafn“ til að giska, eða „vísbending“.</p>
 
               <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
                 <button

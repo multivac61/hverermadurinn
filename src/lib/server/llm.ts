@@ -59,6 +59,13 @@ function logLlm(event: string, data: Record<string, unknown>) {
   console.log(`[llm] ${event}`, JSON.stringify(data));
 }
 
+async function fetchWithOneRetry(url: string, init: RequestInit) {
+  const first = await fetch(url, init);
+  if (first.status !== 429) return first;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return fetch(url, init);
+}
+
 function buildSystemPrompt() {
   return [
     'Role: You are the strict game master for "Hver er maðurinn?".',
@@ -111,7 +118,7 @@ async function askGemini(question: string, person: Person, env: EnvLike) {
   const model = env.LLM_MODEL || 'gemini-2.5-flash-lite';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithOneRetry(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -126,6 +133,8 @@ async function askGemini(question: string, person: Person, env: EnvLike) {
 
   if (!response.ok) {
     logLlm('gemini_http_error', { status: response.status });
+    if (response.status === 429) throw new Error('LLM_RATE_LIMITED');
+    if (response.status >= 500) throw new Error('LLM_UPSTREAM_ERROR');
     return null;
   }
   const data = (await response.json()) as any;
@@ -154,7 +163,7 @@ async function askOpenAiCompatible(question: string, person: Person, env: EnvLik
   const baseUrl = env.LLM_BASE_URL || 'https://api.openai.com/v1';
   const model = env.LLM_MODEL || 'gpt-4o-mini';
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+  const response = await fetchWithOneRetry(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -173,6 +182,8 @@ async function askOpenAiCompatible(question: string, person: Person, env: EnvLik
 
   if (!response.ok) {
     logLlm('openai_http_error', { status: response.status });
+    if (response.status === 429) throw new Error('LLM_RATE_LIMITED');
+    if (response.status >= 500) throw new Error('LLM_UPSTREAM_ERROR');
     return null;
   }
   const data = (await response.json()) as any;
@@ -226,11 +237,16 @@ export async function answerQuestionWithLlm(input: {
       }
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     logLlm('provider_exception', {
       provider,
       question,
-      error: error instanceof Error ? error.message : String(error)
+      error: message
     });
+
+    if (message === 'LLM_RATE_LIMITED' || message === 'LLM_UPSTREAM_ERROR') {
+      throw new Error(message);
+    }
   }
 
   logLlm('fallback_unknown', { provider, question });

@@ -13,6 +13,12 @@ export const questionBodySchema = v.object({
   forceRoundOpen: v.optional(v.boolean())
 });
 
+export const singleInputBodySchema = v.object({
+  sessionId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  input: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
+  forceRoundOpen: v.optional(v.boolean())
+});
+
 export const guessBodySchema = v.object({
   sessionId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   guess: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
@@ -22,6 +28,10 @@ export const guessBodySchema = v.object({
 export const hintBodySchema = v.object({
   sessionId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   forceRoundOpen: v.optional(v.boolean())
+});
+
+export const inputIntentBodySchema = v.object({
+  input: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))
 });
 
 export const sessionStateQuerySchema = v.object({
