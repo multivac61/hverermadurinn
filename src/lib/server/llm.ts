@@ -14,6 +14,8 @@ type LlmAnswer = {
   answerTextIs: string;
 };
 
+type InputIntent = 'question' | 'guess' | 'hint';
+
 function normalizeLabel(value: string): AnswerLabel {
   const v = value.trim().toLowerCase();
   if (v === 'yes' || v === 'já') return 'yes';
@@ -83,6 +85,23 @@ function buildUserPrompt(question: string, person: Person) {
     `Hint: ${person.hintIs}`,
     `Question: ${question}`
   ].join('\n');
+}
+
+function buildIntentSystemPrompt() {
+  return [
+    'Role: classify a single Icelandic player input for a guessing game.',
+    'Return STRICT JSON only: {"kind":"question|guess|hint"}.',
+    'Use hint only when user asks for a hint/help.',
+    'Use guess when user is attempting to name the hidden person.',
+    'Otherwise use question.'
+  ].join('\n');
+}
+
+function normalizeIntent(value: string): InputIntent {
+  const v = value.trim().toLowerCase();
+  if (v === 'hint') return 'hint';
+  if (v === 'guess') return 'guess';
+  return 'question';
 }
 
 async function askGemini(question: string, person: Person, env: EnvLike) {
@@ -179,13 +198,13 @@ export async function answerQuestionWithLlm(input: {
   question: string;
   person: Person;
   env: EnvLike | undefined;
-}) {
+}): Promise<LlmAnswer> {
   const { question, person, env } = input;
   const fallback: LlmAnswer = { answerLabel: 'unknown', answerTextIs: 'Ekki viss.' };
 
   if (!env?.LLM_API_KEY) {
     logLlm('fallback_no_api_key', { provider: env?.LLM_PROVIDER ?? 'none', question });
-    return fallback;
+    return { answerLabel: 'unknown', answerTextIs: 'LLM ekki stillt.' };
   }
 
   const provider = (env.LLM_PROVIDER || 'gemini').toLowerCase();
