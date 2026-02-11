@@ -21,7 +21,7 @@ export async function setUsernameForDeviceId(db: Db, input: { deviceId: string; 
     .where(eq(usernames.usernameNormalized, usernameNormalized))
     .limit(1);
 
-  if (existingByName && existingByName.deviceIdHash !== deviceIdHash) {
+  if (existingByName && String(existingByName.deviceIdHash) !== String(deviceIdHash)) {
     throw new Error('USERNAME_TAKEN');
   }
 
