@@ -1,17 +1,19 @@
-import { command, getRequestEvent, query } from '$app/server';
+import { command, getRequestEvent } from '$app/server';
 import { assertAdminToken } from '$lib/server/admin-auth';
 import { getDb } from '$lib/server/db/client';
 import {
   assignPersonToRoundAdmin,
   createPersonAdmin,
   getRoundAssignmentAdmin,
-  listPersonsAdmin
+  listPersonsAdmin,
+  listSubmissionEventsAdmin
 } from '$lib/server/db/admin';
 import {
   adminAssignRoundSchema,
   adminAuthSchema,
   adminCreatePersonSchema,
-  adminRoundQuerySchema
+  adminRoundQuerySchema,
+  adminSubmissionsQuerySchema
 } from '$lib/server/validation/admin';
 
 function requireDb() {
@@ -21,7 +23,7 @@ function requireDb() {
   return db;
 }
 
-export const adminListPersons = query(adminAuthSchema, async ({ token }) => {
+export const adminListPersons = command(adminAuthSchema, async ({ token }) => {
   assertAdminToken(token);
   const db = requireDb();
   const people = await listPersonsAdmin(db);
@@ -35,11 +37,14 @@ export const adminCreatePerson = command(adminCreatePersonSchema, async (input) 
     displayName: input.displayName,
     descriptionIs: input.descriptionIs,
     imageUrl: input.imageUrl,
-    aliasesCsv: input.aliasesCsv
+    aliasesCsv: input.aliasesCsv,
+    isIcelander: input.isIcelander,
+    yesKeywordsCsv: input.yesKeywordsCsv,
+    noKeywordsCsv: input.noKeywordsCsv
   });
 });
 
-export const adminGetRound = query(adminRoundQuerySchema, async (input) => {
+export const adminGetRound = command(adminRoundQuerySchema, async (input) => {
   assertAdminToken(input.token);
   const db = requireDb();
   const round = await getRoundAssignmentAdmin(db, input.roundId);
@@ -54,4 +59,15 @@ export const adminAssignRound = command(adminAssignRoundSchema, async (input) =>
     personId: input.personId,
     hintTextIs: input.hintTextIs
   });
+});
+
+export const adminListSubmissions = command(adminSubmissionsQuerySchema, async (input) => {
+  assertAdminToken(input.token);
+  const db = requireDb();
+  const result = await listSubmissionEventsAdmin(db, {
+    roundId: input.roundId,
+    limit: input.limit,
+    flaggedOnly: input.flaggedOnly
+  });
+  return result;
 });

@@ -2,7 +2,7 @@ import { command, getRequestEvent, query } from '$app/server';
 import { eq } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { randomId } from '$lib/shared/id';
-import { answerQuestionWithLlm, classifyInputIntentWithLlm } from '$lib/server/llm';
+import { answerQuestionWithLlm, classifyInputIntentWithLlm, extractGuessText } from '$lib/server/llm';
 import {
   askQuestionDb,
   getLeaderboardDb,
@@ -147,7 +147,11 @@ export const askQuestionCommand = command(questionBodySchema, async (input) => {
         input.question,
         Date.now(),
         async ({ question, person }) => answerQuestionWithLlm({ question, person, env }),
-        { forceRoundOpen: effectiveForceOpen }
+        {
+          forceRoundOpen: effectiveForceOpen,
+          submissionInputText: input.question,
+          classifiedIntent: 'question'
+        }
       )
     : askQuestion(input.sessionId, input.question, Date.now(), { forceOpen: effectiveForceOpen });
 });
@@ -157,7 +161,9 @@ export const submitGuessCommand = command(guessBodySchema, async (input) => {
   const effectiveForceOpen = forceRoundOpen || input.forceRoundOpen === true;
   return db
     ? await submitGuessDb(db, input.sessionId, input.guess, Date.now(), {
-        forceRoundOpen: effectiveForceOpen
+        forceRoundOpen: effectiveForceOpen,
+        submissionInputText: input.guess,
+        classifiedIntent: 'guess'
       })
     : submitGuess(input.sessionId, input.guess, Date.now(), { forceOpen: effectiveForceOpen });
 });
@@ -166,7 +172,11 @@ export const requestHintCommand = command(hintBodySchema, async (input) => {
   const { db, forceRoundOpen } = getServices();
   const effectiveForceOpen = forceRoundOpen || input.forceRoundOpen === true;
   return db
-    ? await useHintDb(db, input.sessionId, Date.now(), { forceRoundOpen: effectiveForceOpen })
+    ? await useHintDb(db, input.sessionId, Date.now(), {
+        forceRoundOpen: effectiveForceOpen,
+        submissionInputText: 'vísbending',
+        classifiedIntent: 'hint'
+      })
     : useHint(input.sessionId, Date.now(), { forceOpen: effectiveForceOpen });
 });
 
@@ -184,7 +194,11 @@ export const handleInputCommand = command(singleInputBodySchema, async (input) =
 
   if (intent.kind === 'hint') {
     const result = db
-      ? await useHintDb(db, input.sessionId, Date.now(), { forceRoundOpen: effectiveForceOpen })
+      ? await useHintDb(db, input.sessionId, Date.now(), {
+          forceRoundOpen: effectiveForceOpen,
+          submissionInputText: text,
+          classifiedIntent: 'hint'
+        })
       : useHint(input.sessionId, Date.now(), { forceOpen: effectiveForceOpen });
     return {
       kind: 'hint' as const,
@@ -194,10 +208,12 @@ export const handleInputCommand = command(singleInputBodySchema, async (input) =
   }
 
   if (intent.kind === 'guess') {
-    const guessText = text.replace(/^(gisk|giska|guess)\s*:\s*/i, '').trim();
+    const guessText = extractGuessText(text);
     const result = db
       ? await submitGuessDb(db, input.sessionId, guessText, Date.now(), {
-          forceRoundOpen: effectiveForceOpen
+          forceRoundOpen: effectiveForceOpen,
+          submissionInputText: text,
+          classifiedIntent: 'guess'
         })
       : submitGuess(input.sessionId, guessText, Date.now(), { forceOpen: effectiveForceOpen });
 
@@ -217,7 +233,11 @@ export const handleInputCommand = command(singleInputBodySchema, async (input) =
         text,
         Date.now(),
         async ({ question, person }) => answerQuestionWithLlm({ question, person, env }),
-        { forceRoundOpen: effectiveForceOpen }
+        {
+          forceRoundOpen: effectiveForceOpen,
+          submissionInputText: text,
+          classifiedIntent: 'question'
+        }
       )
     : askQuestion(input.sessionId, text, Date.now(), { forceOpen: effectiveForceOpen });
 

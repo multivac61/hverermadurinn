@@ -1,9 +1,10 @@
-import type { Person } from '$lib/server/game';
+import { answerQuestionForPerson, type Person } from '$lib/server/game';
 
 type EnvLike = {
   LLM_API_KEY?: string;
   LLM_PROVIDER?: string;
   LLM_MODEL?: string;
+  LLM_INTENT_MODEL?: string;
   LLM_BASE_URL?: string;
 };
 
@@ -14,8 +15,7 @@ type LlmAnswer = {
   answerTextIs: string;
 };
 
-type InputIntent = 'question' | 'guess' | 'hint';
-
+export type InputIntent = 'question' | 'guess' | 'hint';
 
 function normalizeLabel(value: string): AnswerLabel {
   const v = value.trim().toLowerCase();
@@ -113,26 +113,34 @@ async function fetchWithOneRetry(url: string, init: RequestInit) {
 
 function buildSystemPrompt() {
   return [
-    'Role: You are the strict game master for "Hver er maðurinn?".',
+    'Role: You are the witty but precise game master for "Hver er maðurinn?".',
     'Language: Always answer in Icelandic.',
-    'You must answer clearly and briefly (one short sentence).',
-    'Prefer direct labels: yes/no whenever possible; use unknown only when evidence is genuinely insufficient.',
-    'For factual binary questions (e.g. nationality/profession), avoid unknown unless the provided facts truly do not decide it.',
-    'Never reveal or confirm the exact person name directly.',
-    'Gender questions are allowed and should be answered normally.',
-    'Examples:',
-    '- Q: "Er manneskjan íslendingur?" -> {"answerLabel":"yes","answerTextIs":"Já."} or {"answerLabel":"no","answerTextIs":"Nei."}',
-    '- Q: "Er hún tónlistarkona?" -> short yes/no/unknown based on facts.',
+    'Primary objective: answer the player\'s exact question intent, not a nearby interpretation.',
+    'Interpretation rules:',
+    '- Preserve polarity and negation exactly.',
+    '- Example: Q="Er hún ekki forseti?" -> yes means she is NOT president.',
+    '- If input is vague or not answerable from known facts, use unknown.',
+    '- Never reveal or confirm the exact person name directly.',
+    '- Gender questions are allowed and should be answered normally.',
+    'Style rules:',
+    '- One short sentence only (max ~12 words).',
+    '- Start with a clear verdict word aligned with answerLabel.',
+    '- Keep tone playful, clever, and kind (no sarcasm, no rudeness).',
     'Output STRICT JSON only: {"answerLabel":"yes|no|unknown|probably_yes|probably_no","answerTextIs":"short icelandic sentence"}.',
     'Do not output markdown or any text outside JSON.'
   ].join('\n');
 }
 
 function buildUserPrompt(question: string, person: Person) {
+  const nationality =
+    person.isIcelander === true ? 'yes' : person.isIcelander === false ? 'no' : 'unknown';
+
   return [
     `Target person name: ${person.displayName}`,
     `Known aliases: ${person.aliases.join(', ')}`,
-    `Known nationality flag (is Icelandic): ${person.isIcelander ? 'yes' : 'no'}`,
+    `Known nationality flag (is Icelandic): ${nationality}`,
+    `Known yes-tags: ${person.yesKeywords.length ? person.yesKeywords.join(', ') : '(none provided)'}`,
+    `Known no-tags: ${person.noKeywords.length ? person.noKeywords.join(', ') : '(none provided)'}`,
     `Bio: ${person.revealTextIs}`,
     `Hint: ${person.hintIs}`,
     `Question: ${question}`
@@ -144,8 +152,9 @@ function buildIntentSystemPrompt() {
     'Role: classify one player input for the game "Hver er maðurinn?".',
     'Language: Icelandic game context.',
     'Return STRICT JSON only: {"kind":"question|guess|hint"}.',
-    'Use hint if player asks for hint/help.',
-    'Use guess if player attempts to name the person.',
+    'Use hint if player asks for help or a hint (e.g. "vísbending", "má ég fá hjálp?").',
+    'Use guess if player proposes a specific identity (e.g. "Er þetta Björk?", "Ég giska á ...", "Björk Guðmundsdóttir").',
+    'Treat generic attribute checks as question (e.g. "Er þetta kona?" is question).',
     'Otherwise use question.',
     'No extra text outside JSON.'
   ].join('\n');
@@ -158,11 +167,120 @@ function normalizeIntent(value: string): InputIntent {
   return 'question';
 }
 
+function isHintLike(text: string) {
+  const n = normalizeText(text);
+  if (!n) return false;
+
+  if (/\b(visbending|hint)\b/.test(n)) return true;
+  if (/\b(hjalp|hjalpa|help)\b/.test(n)) return true;
+
+  return false;
+}
+
+const GENERIC_GUESS_OBJECT_TERMS = new Set([
+  'manneskja',
+  'persona',
+  'personan',
+  'madur',
+  'maður',
+  'kona',
+  'karl',
+  'karlmadur',
+  'kvenmadur',
+  'islendingur',
+  'islensk',
+  'islenskur',
+  'tonlistarkona',
+  'tonlistarmadur',
+  'songkona',
+  'songvari',
+  'leikari',
+  'forseti',
+  'ithrottamadur',
+  'lifandi',
+  'latinn',
+  'daudur',
+  'daud'
+]);
+
+function hasUppercaseNameCue(text: string) {
+  return /\b[A-ZÁÉÍÓÚÝÞÆÖ][a-záðéíóúýþæö]+\b/u.test(text);
+}
+
+export function extractGuessText(inputText: string) {
+  let text = inputText.trim();
+
+  const patterns = [
+    /^(gisk|giska|guess)\s*:?\s*/i,
+    /^(eg|ég)\s+giska\s+(a|á)\s*/i,
+    /^(my\s+guess\s+is)\s*/i,
+    /^(eg|ég)\s+held\s+ad\s+(thetta|þetta)\s+se\s*/i,
+    /^(held\s+ad\s+(thetta|þetta)\s+se)\s*/i,
+    /^(getur\s+(thetta|þetta|hann|hun|hún)\s+verid|getur\s+(thetta|þetta|hann|hun|hún)\s+verið)\s*/i,
+    /^(er|is)\s+(thetta|þetta|hann|hun|hún)\s+/i,
+    /^(heitir\s+(hann|hun|hún))\s+/i
+  ];
+
+  for (const pattern of patterns) {
+    text = text.replace(pattern, '').trim();
+  }
+
+  text = text.replace(/[?.!]+$/g, '').trim();
+  return text || inputText.trim();
+}
+
+function isGuessLike(text: string) {
+  const n = normalizeText(text);
+  if (!n) return false;
+
+  if (/^(gisk|giska|guess)\b/.test(n)) return true;
+  if (/\b(eg|ég)\s+giska\b/.test(n)) return true;
+  if (/\b(my guess|i guess)\b/.test(n)) return true;
+  if (/\b(held ad (thetta|þetta) se|getur (thetta|þetta) verid|getur (thetta|þetta) verið)\b/.test(n)) {
+    return true;
+  }
+
+  if (/^(er|is)\s+(thetta|þetta|hann|hun|hún)\s+/.test(n)) {
+    const candidate = normalizeText(extractGuessText(text));
+    if (!candidate) return false;
+    const tokens = candidate.split(' ').filter(Boolean);
+    const allGeneric = tokens.length > 0 && tokens.every((token) => GENERIC_GUESS_OBJECT_TERMS.has(token));
+    if (!allGeneric && (tokens.length >= 2 || hasUppercaseNameCue(text))) return true;
+  }
+
+  const trimmed = text.trim();
+  const noQuestionMark = !trimmed.includes('?');
+  if (noQuestionMark) {
+    const candidate = normalizeText(trimmed);
+    const tokens = candidate.split(' ').filter(Boolean);
+    const hasQuestionVerb = /\b(er|eru|hvad|hvað|hver|hvar|hvenaer|hvenær|afhverju|af hverju|is|does|did|can)\b/.test(
+      candidate
+    );
+
+    if (
+      !hasQuestionVerb &&
+      tokens.length >= 2 &&
+      tokens.length <= 5 &&
+      !tokens.every((token) => GENERIC_GUESS_OBJECT_TERMS.has(token))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function inferIntentHeuristically(raw: string): InputIntent | null {
+  if (isHintLike(raw)) return 'hint';
+  if (isGuessLike(raw)) return 'guess';
+  return null;
+}
+
 async function askGemini(question: string, person: Person, env: EnvLike) {
   const key = env.LLM_API_KEY;
   if (!key) return null;
 
-  const model = env.LLM_MODEL || 'gemini-2.5-flash-lite';
+  const model = env.LLM_MODEL || 'gemini-3-flash-preview';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
   const response = await fetchWithOneRetry(url, {
@@ -172,7 +290,7 @@ async function askGemini(question: string, person: Person, env: EnvLike) {
       systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
       contents: [{ role: 'user', parts: [{ text: buildUserPrompt(question, person) }] }],
       generationConfig: {
-        temperature: 0.2,
+        temperature: 0.35,
         responseMimeType: 'application/json'
       }
     })
@@ -218,7 +336,7 @@ async function askOpenAiCompatible(question: string, person: Person, env: EnvLik
     },
     body: JSON.stringify({
       model,
-      temperature: 0.2,
+      temperature: 0.35,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: buildSystemPrompt() },
@@ -256,7 +374,7 @@ async function classifyWithGemini(inputText: string, env: EnvLike) {
   const key = env.LLM_API_KEY;
   if (!key) return null;
 
-  const model = env.LLM_MODEL || 'gemini-2.5-flash-lite';
+  const model = env.LLM_INTENT_MODEL || env.LLM_MODEL || 'gemini-2.5-flash-lite';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
   const response = await fetchWithOneRetry(url, {
@@ -292,7 +410,7 @@ async function classifyWithOpenAiCompatible(inputText: string, env: EnvLike) {
   if (!key) return null;
 
   const baseUrl = env.LLM_BASE_URL || 'https://api.openai.com/v1';
-  const model = env.LLM_MODEL || 'gpt-4o-mini';
+  const model = env.LLM_INTENT_MODEL || env.LLM_MODEL || 'gpt-4o-mini';
 
   const response = await fetchWithOneRetry(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
@@ -333,9 +451,9 @@ export async function classifyInputIntentWithLlm(input: {
   const raw = input.inputText.trim();
   if (!raw) return { kind: 'question' };
 
-  const lower = raw.toLowerCase();
-  if (['vísbending', 'visbending', 'hint', 'hjálp', 'hjalp'].includes(lower)) {
-    return { kind: 'hint' };
+  const heuristicIntent = inferIntentHeuristically(raw);
+  if (heuristicIntent) {
+    return { kind: heuristicIntent };
   }
 
   if (!input.env?.LLM_API_KEY) {
@@ -370,11 +488,10 @@ export async function answerQuestionWithLlm(input: {
   env: EnvLike | undefined;
 }): Promise<LlmAnswer> {
   const { question, person, env } = input;
-  const fallback: LlmAnswer = { answerLabel: 'unknown', answerTextIs: 'Ekki viss.' };
 
   if (!env?.LLM_API_KEY) {
     logLlm('fallback_no_api_key', { provider: env?.LLM_PROVIDER ?? 'none', question });
-    return { answerLabel: 'unknown', answerTextIs: 'LLM ekki stillt.' };
+    return answerQuestionForPerson(question, person);
   }
 
   const provider = (env.LLM_PROVIDER || 'gemini').toLowerCase();
@@ -411,5 +528,5 @@ export async function answerQuestionWithLlm(input: {
   }
 
   logLlm('fallback_unknown', { provider, question });
-  return fallback;
+  return answerQuestionForPerson(question, person);
 }

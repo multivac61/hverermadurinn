@@ -10,7 +10,7 @@ export type Person = {
   imageUrl: string;
   aliases: string[];
   hintIs: string;
-  isIcelander: boolean;
+  isIcelander: boolean | null;
   yesKeywords: string[];
   noKeywords: string[];
 };

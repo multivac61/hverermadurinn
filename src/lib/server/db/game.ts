@@ -1,7 +1,15 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { randomId } from '$lib/shared/id';
 import { hashDeviceId } from '$lib/server/device';
-import { deviceSessions, guessEvents, persons, questionEvents, rounds, usernames } from '$lib/server/db/schema';
+import {
+  deviceSessions,
+  guessEvents,
+  persons,
+  questionEvents,
+  rounds,
+  submissionEvents,
+  usernames
+} from '$lib/server/db/schema';
 import {
   MAX_QUESTIONS,
   PERSONS,
@@ -20,12 +28,59 @@ type AnswerPayload = {
 
 type AnswerResolver = (input: { question: string; person: any }) => Promise<AnswerPayload>;
 
+type SubmissionIntentKind = 'question' | 'guess' | 'hint';
+
 type RoundRuntimeOptions = {
   forceRoundOpen?: boolean;
+  submissionInputText?: string;
+  classifiedIntent?: SubmissionIntentKind;
 };
 
 function parseRoundOpen(roundId: string) {
   return new Date(`${roundId}T12:00:00.000Z`).getTime();
+}
+
+function isMissingTableError(errorInput: unknown, tableName: string) {
+  const message = errorInput instanceof Error ? errorInput.message : String(errorInput ?? '');
+  const lower = message.toLowerCase();
+  return lower.includes('no such table') && lower.includes(tableName.toLowerCase());
+}
+
+async function appendSubmissionEventDb(
+  db: Db,
+  input: {
+    roundId: string;
+    sessionId: string;
+    inputText: string;
+    intentKind: SubmissionIntentKind;
+    resolvedKind: SubmissionIntentKind;
+    normalizedGuessText?: string | null;
+    answerLabel?: string | null;
+    answerTextIs?: string | null;
+    guessCorrect?: boolean | null;
+    questionCount: number;
+    remaining: number;
+    now: number;
+  }
+) {
+  await db
+    .insert(submissionEvents)
+    .values({
+      id: randomId(),
+      roundId: input.roundId,
+      sessionId: input.sessionId,
+      inputText: input.inputText,
+      intentKind: input.intentKind,
+      resolvedKind: input.resolvedKind,
+      normalizedGuessText: input.normalizedGuessText ?? null,
+      answerLabel: input.answerLabel ?? null,
+      answerTextIs: input.answerTextIs ?? null,
+      guessCorrect: input.guessCorrect ?? null,
+      questionCount: input.questionCount,
+      remaining: input.remaining,
+      createdAt: new Date(input.now)
+    })
+    .run();
 }
 
 async function ensurePersons(db: Db) {
@@ -38,7 +93,13 @@ async function ensurePersons(db: Db) {
         slug: person.id,
         descriptionIs: person.revealTextIs,
         imageUrl: person.imageUrl,
-        metadataJson: JSON.stringify({ aliases: person.aliases }),
+        metadataJson: JSON.stringify({
+          aliases: person.aliases,
+          isIcelander: person.isIcelander,
+          yesKeywords: person.yesKeywords,
+          noKeywords: person.noKeywords,
+          hintIs: person.hintIs
+        }),
         createdAt: new Date()
       }))
     )
@@ -160,15 +221,42 @@ export async function getSessionStateDb(db: Db, sessionId: string) {
   };
 }
 
-function parseAliases(metadataJson: string | null) {
-  if (!metadataJson) return [] as string[];
+type PersonMetadata = {
+  aliases: string[];
+  isIcelander: boolean | null;
+  yesKeywords: string[];
+  noKeywords: string[];
+  hintIs: string | null;
+};
+
+function parseStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [] as string[];
+  return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
+}
+
+function parsePersonMetadata(metadataJson: string | null): PersonMetadata {
+  if (!metadataJson) {
+    return { aliases: [], isIcelander: null, yesKeywords: [], noKeywords: [], hintIs: null };
+  }
+
   try {
-    const parsed = JSON.parse(metadataJson) as { aliases?: unknown };
-    return Array.isArray(parsed.aliases)
-      ? parsed.aliases.filter((value): value is string => typeof value === 'string')
-      : [];
+    const parsed = JSON.parse(metadataJson) as {
+      aliases?: unknown;
+      isIcelander?: unknown;
+      yesKeywords?: unknown;
+      noKeywords?: unknown;
+      hintIs?: unknown;
+    };
+
+    return {
+      aliases: parseStringArray(parsed.aliases),
+      isIcelander: typeof parsed.isIcelander === 'boolean' ? parsed.isIcelander : null,
+      yesKeywords: parseStringArray(parsed.yesKeywords),
+      noKeywords: parseStringArray(parsed.noKeywords),
+      hintIs: typeof parsed.hintIs === 'string' ? parsed.hintIs.trim() || null : null
+    };
   } catch {
-    return [];
+    return { aliases: [], isIcelander: null, yesKeywords: [], noKeywords: [], hintIs: null };
   }
 }
 
@@ -179,19 +267,19 @@ async function resolvePersonForSession(db: Db, roundId: string) {
   const [personRow] = await db.select().from(persons).where(eq(persons.id, roundRow.personId)).limit(1);
   if (!personRow) return getPersonForRoundId(roundId);
 
-  const fallback = getPersonForRoundId(roundId);
-  const aliases = parseAliases(personRow.metadataJson);
+  const staticPerson = PERSONS.find((person) => person.id === personRow.id) ?? null;
+  const metadata = parsePersonMetadata(personRow.metadataJson);
 
   return {
     id: personRow.id,
     displayName: personRow.displayName,
     revealTextIs: personRow.descriptionIs,
-    imageUrl: personRow.imageUrl || fallback.imageUrl,
-    aliases: aliases.length > 0 ? aliases : fallback.aliases,
-    hintIs: roundRow.hintTextIs || fallback.hintIs,
-    isIcelander: fallback.isIcelander,
-    yesKeywords: fallback.yesKeywords,
-    noKeywords: fallback.noKeywords
+    imageUrl: personRow.imageUrl || staticPerson?.imageUrl || '',
+    aliases: metadata.aliases.length > 0 ? metadata.aliases : staticPerson?.aliases ?? [],
+    hintIs: roundRow.hintTextIs || metadata.hintIs || staticPerson?.hintIs || 'Engin vísbending í boði.',
+    isIcelander: metadata.isIcelander ?? staticPerson?.isIcelander ?? null,
+    yesKeywords: metadata.yesKeywords.length > 0 ? metadata.yesKeywords : staticPerson?.yesKeywords ?? [],
+    noKeywords: metadata.noKeywords.length > 0 ? metadata.noKeywords : staticPerson?.noKeywords ?? []
   };
 }
 
@@ -237,11 +325,26 @@ export async function askQuestionDb(
     .where(eq(deviceSessions.id, sessionId))
     .run();
 
+  const remaining = Math.max(0, MAX_QUESTIONS - nextCount);
+
+  await appendSubmissionEventDb(db, {
+    roundId: session.roundId,
+    sessionId,
+    inputText: options.submissionInputText?.trim() || question,
+    intentKind: options.classifiedIntent ?? 'question',
+    resolvedKind: 'question',
+    answerLabel,
+    answerTextIs,
+    questionCount: nextCount,
+    remaining,
+    now
+  });
+
   return {
     answerLabel,
     answerTextIs,
     questionCount: nextCount,
-    remaining: Math.max(0, MAX_QUESTIONS - nextCount)
+    remaining
   };
 }
 
@@ -266,6 +369,20 @@ export async function useHintDb(
     .run();
 
   const person = await resolvePersonForSession(db, session.roundId);
+  const remaining = Math.max(0, MAX_QUESTIONS - session.questionCount);
+
+  await appendSubmissionEventDb(db, {
+    roundId: session.roundId,
+    sessionId,
+    inputText: options.submissionInputText?.trim() || 'vísbending',
+    intentKind: options.classifiedIntent ?? 'hint',
+    resolvedKind: 'hint',
+    answerTextIs: person.hintIs,
+    questionCount: session.questionCount,
+    remaining,
+    now
+  });
+
   return {
     hint: person.hintIs,
     hintUsed: true
@@ -323,13 +440,30 @@ export async function submitGuessDb(
     })
     .run();
 
+  const remaining = Math.max(0, MAX_QUESTIONS - nextCount);
+
+  await appendSubmissionEventDb(db, {
+    roundId: session.roundId,
+    sessionId,
+    inputText: options.submissionInputText?.trim() || guess,
+    intentKind: options.classifiedIntent ?? 'guess',
+    resolvedKind: 'guess',
+    normalizedGuessText: guess,
+    guessCorrect: correct,
+    answerLabel: correct ? 'yes' : 'no',
+    answerTextIs: correct ? 'Rétt.' : 'Nei.',
+    questionCount: nextCount,
+    remaining,
+    now
+  });
+
   const reveal = solved || currentRound.status === 'closed';
 
   return {
     correct,
     solved,
     questionCount: nextCount,
-    remaining: Math.max(0, MAX_QUESTIONS - nextCount),
+    remaining,
     reveal,
     revealPerson: reveal
       ? {

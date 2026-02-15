@@ -47,6 +47,7 @@ bun run db:migrate:remote
 ## Current status
 - Round lifecycle with Iceland timezone logic (`12:00` open, `17:00` close)
 - D1-backed game state (sessions, questions, guesses, leaderboard)
+- Locked append-only submission audit log (`submission_events`) for post-round review
 - Deterministic daily person selection with per-round persistence in D1
 - Question flow (`max 20`), one-time hint, and reveal flow
 - Typeform-like single-page UI prototype in Icelandic
@@ -58,6 +59,7 @@ bun run db:migrate:remote
 - Route: `/admin`
 - Uses remote functions + `ADMIN_TOKEN` check
 - Set a real token in Cloudflare Workers env vars before deploy
+- If your token contains `#` in `.dev.vars`, wrap it in quotes, e.g. `ADMIN_TOKEN="abc#123"`
 
 ## LLM integration (ready)
 Set secret/API settings in Cloudflare:
@@ -68,7 +70,8 @@ bunx wrangler secret put LLM_API_KEY
 
 And in `wrangler.toml` vars (already added):
 - `LLM_PROVIDER` (`gemini`, `openai`, `openai-compatible`, or `kimi`)
-- `LLM_MODEL`
+- `LLM_MODEL` (recommended: `gemini-3-flash-preview`; quality-first option: `gemini-3-pro-preview`)
+- optional `LLM_INTENT_MODEL` (defaults to `LLM_MODEL`; use a cheaper model for intent classification)
 - optional `LLM_BASE_URL` for OpenAI-compatible providers
 
 ## Local testing mode (no waiting)

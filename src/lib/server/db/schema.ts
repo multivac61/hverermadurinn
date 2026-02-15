@@ -72,6 +72,29 @@ export const guessEvents = sqliteTable(
   (t) => [index('idx_guess_events_session_created').on(t.sessionId, t.createdAt)]
 );
 
+export const submissionEvents = sqliteTable(
+  'submission_events',
+  {
+    id: text('id').primaryKey(),
+    roundId: text('round_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    inputText: text('input_text').notNull(),
+    intentKind: text('intent_kind').notNull(),
+    resolvedKind: text('resolved_kind').notNull(),
+    normalizedGuessText: text('normalized_guess_text'),
+    answerLabel: text('answer_label'),
+    answerTextIs: text('answer_text_is'),
+    guessCorrect: integer('guess_correct', { mode: 'boolean' }),
+    questionCount: integer('question_count').notNull(),
+    remaining: integer('remaining').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+  },
+  (t) => [
+    index('idx_submission_events_round_created').on(t.roundId, t.createdAt),
+    index('idx_submission_events_session_created').on(t.sessionId, t.createdAt)
+  ]
+);
+
 export const usernames = sqliteTable(
   'usernames',
   {

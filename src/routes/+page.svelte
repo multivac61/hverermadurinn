@@ -180,6 +180,23 @@
     return `${hh}:${mm}:${ss}`;
   }
 
+  function normalizeUiError(errorInput: unknown) {
+    const raw = errorInput instanceof Error ? errorInput.message : String(errorInput ?? 'UNKNOWN_ERROR');
+
+    if (raw === 'LLM_RATE_LIMITED') return 'Kerfið er upptekið núna (hátt álag). Reyndu aftur eftir smástund.';
+    if (raw === 'LLM_UPSTREAM_ERROR') return 'Villa hjá svarþjónustu. Reyndu aftur.';
+    if (raw === 'ROUND_NOT_OPEN') return 'Leikurinn er ekki opinn núna.';
+    if (raw === 'QUESTION_LIMIT_REACHED') return 'Spurningamark náð.';
+    if (raw === 'ALREADY_SOLVED') return 'Þú ert þegar búin(n) að leysa leikinn í dag.';
+    if (raw === 'SESSION_NOT_FOUND') return 'Lota fannst ekki. Endurhlaðið síðuna.';
+
+    if (raw.includes('Remote function schema validation failed')) {
+      return 'Ógild gögn í innslætti. Athugaðu reitinn og reyndu aftur.';
+    }
+
+    return raw;
+  }
+
   function refreshCountdown() {
     if (!round) return;
     const now = Date.now();
@@ -253,14 +270,7 @@
       await leaderboardQuery.refresh();
       await roundQuery.refresh();
     } catch (e) {
-      const message = (e as Error).message;
-      if (message === 'LLM_RATE_LIMITED') {
-        error = 'Kerfið er upptekið núna (hátt álag). Reyndu aftur eftir smástund.';
-      } else if (message === 'LLM_UPSTREAM_ERROR') {
-        error = 'Villa hjá svarþjónustu. Reyndu aftur.';
-      } else {
-        error = message;
-      }
+      error = normalizeUiError(e);
     }
   }
 
@@ -300,19 +310,23 @@
       return;
     }
 
-    const result = await setUsernameCommand({ deviceId: currentDeviceId, username: candidate });
-    if (!result.ok) {
-      usernameError =
-        result.error === 'USERNAME_TAKEN'
-          ? 'Þetta notendanafn er þegar tekið.'
-          : 'Ekki tókst að vista notendanafn. Reyndu aftur.';
-      return;
-    }
+    try {
+      const result = await setUsernameCommand({ deviceId: currentDeviceId, username: candidate });
+      if (!result.ok) {
+        usernameError =
+          result.error === 'USERNAME_TAKEN'
+            ? 'Þetta notendanafn er þegar tekið.'
+            : 'Ekki tókst að vista notendanafn. Reyndu aftur.';
+        return;
+      }
 
-    username = result.username;
-    usernameInput = result.username;
-    usernameConfirmed = true;
-    await leaderboardQuery.refresh();
+      username = result.username;
+      usernameInput = result.username;
+      usernameConfirmed = true;
+      await leaderboardQuery.refresh();
+    } catch (e) {
+      usernameError = normalizeUiError(e);
+    }
   }
 
   function startGame() {
@@ -429,16 +443,21 @@
       await roundQuery.refresh();
       refreshCountdown();
     } catch (e) {
-      error = (e as Error).message;
+      error = normalizeUiError(e);
     }
   }
 
   async function toggleLocalTestMode() {
-    localTestMode = !localTestMode;
-    localStorage.setItem(LOCAL_TEST_MODE_KEY, String(localTestMode));
-    await initializeSession(true);
-    await roundQuery.refresh();
-    refreshCountdown();
+    error = '';
+    try {
+      localTestMode = !localTestMode;
+      localStorage.setItem(LOCAL_TEST_MODE_KEY, String(localTestMode));
+      await initializeSession(true);
+      await roundQuery.refresh();
+      refreshCountdown();
+    } catch (e) {
+      error = normalizeUiError(e);
+    }
   }
 
   onMount(() => {
@@ -453,7 +472,7 @@
         await initializeSession();
         refreshCountdown();
       } catch (e) {
-        if (!disposed) error = (e as Error).message;
+        if (!disposed) error = normalizeUiError(e);
       }
     })();
 
@@ -575,9 +594,11 @@
               <input
                 class="w-full rounded-none border-0 border-b-2 border-zinc-300 bg-transparent px-0 py-3 text-2xl font-medium outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 sm:text-4xl"
                 bind:value={inputText}
-                placeholder="Skrifaðu svar..."
+                placeholder="Spyrðu eða giskaðu..."
                 bind:this={questionInputEl}
               />
+
+              <p class="mt-3 text-sm text-zinc-500">Dæmi: „Er þetta tónlistarkona?", „Er þetta Björk?", eða „vísbending".</p>
 
               <div class="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
                 <button
