@@ -63,24 +63,33 @@ async function appendSubmissionEventDb(
     now: number;
   }
 ) {
-  await db
-    .insert(submissionEvents)
-    .values({
-      id: randomId(),
-      roundId: input.roundId,
-      sessionId: input.sessionId,
-      inputText: input.inputText,
-      intentKind: input.intentKind,
-      resolvedKind: input.resolvedKind,
-      normalizedGuessText: input.normalizedGuessText ?? null,
-      answerLabel: input.answerLabel ?? null,
-      answerTextIs: input.answerTextIs ?? null,
-      guessCorrect: input.guessCorrect ?? null,
-      questionCount: input.questionCount,
-      remaining: input.remaining,
-      createdAt: new Date(input.now)
-    })
-    .run();
+  try {
+    await db
+      .insert(submissionEvents)
+      .values({
+        id: randomId(),
+        roundId: input.roundId,
+        sessionId: input.sessionId,
+        inputText: input.inputText,
+        intentKind: input.intentKind,
+        resolvedKind: input.resolvedKind,
+        normalizedGuessText: input.normalizedGuessText ?? null,
+        answerLabel: input.answerLabel ?? null,
+        answerTextIs: input.answerTextIs ?? null,
+        guessCorrect: input.guessCorrect ?? null,
+        questionCount: input.questionCount,
+        remaining: input.remaining,
+        createdAt: new Date(input.now)
+      })
+      .run();
+  } catch (error) {
+    if (isMissingTableError(error, 'submission_events')) {
+      console.warn('[db] submission_events table missing; skipping audit insert');
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function ensurePersons(db: Db) {
